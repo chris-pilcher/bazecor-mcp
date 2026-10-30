@@ -1,4 +1,81 @@
-# Bazecor
+# Bazecor MCP
+
+> **Personal, unofficial fork of [Dygma's Bazecor](https://github.com/Dygmalab/Bazecor).**
+> This project aims to make Bazecor's configuration functions available through the
+> Model Context Protocol (MCP), so an agent can connect to the running desktop app
+> and control the same configuration you see and edit in the UI.
+> **MCP control is not implemented yet in this checkout.** The existing keyboard
+> configurator works independently of that planned integration.
+
+Linux x86-64 AppImage is the primary distribution target. This fork is maintained
+for personal use by Chris Pilcher and is not an official Dygma release. Upstream
+copyright notices and the GPL-3.0-only license remain in effect.
+
+## Download and run on Linux
+
+Download the `.AppImage` and `SHA256SUMS` from this fork's
+[Releases](https://github.com/chris-pilcher/bazecor-mcp/releases). A release appears
+there after a successful tagged build. Then, in the download directory:
+
+```sh
+sha256sum --check SHA256SUMS
+chmod +x Bazecor-MCP-*.AppImage
+./Bazecor-MCP-*.AppImage
+```
+
+An AppImage is a portable application: no package installation is required. Keep
+one downloaded version in its own directory when using the wildcard commands
+above. Normal Dygma USB/serial access permissions still apply. If your system
+reports that `libfuse.so.2` is missing, install your distribution's FUSE 2
+compatibility package, or extract and run the image:
+
+```sh
+./Bazecor-MCP-*.AppImage --appimage-extract
+./squashfs-root/AppRun
+```
+
+The fork uses its own application name and settings directory. Automatic updates
+from the official Bazecor repository are disabled; download new fork versions
+from the Releases page.
+
+## Personal builds and releases
+
+The **Linux AppImage** GitHub Actions workflow runs tests and builds the AppImage
+on pushes, pull requests, and manual runs. Download the `Bazecor-MCP-linux-x64`
+artifact from a successful run for a build without publishing a release. These
+builds do not need Dygma's signing credentials or custom repository secrets.
+
+To publish a personal release, push a tag beginning with `mcp-v`, for example:
+
+```sh
+git tag mcp-v0.1.0
+git push origin mcp-v0.1.0
+```
+
+The tag workflow tests and builds the tagged source, then publishes the AppImage
+and SHA-256 checksum in a GitHub Release using the built-in `GITHUB_TOKEN`.
+Release assets include the tag in their name; untagged builds include the commit
+SHA. Tags containing a hyphen after the version (for example,
+`mcp-v0.1.0-beta.1`) are published as prereleases. The embedded application version
+currently follows upstream's `package.json` version. Publishing is restricted to
+this fork. Linux is the required build; macOS and Windows remain available as
+local build targets below.
+
+For a local Linux build, use Node.js 22.14 or newer and Yarn 1.22.22, install
+`build-essential`, `python3`, `pkg-config`, `libudev-dev`, and `libusb-1.0-0-dev`,
+then run:
+
+```sh
+yarn install --frozen-lockfile
+yarn make-lin
+```
+
+The AppImage is written beneath `out/make/`. Flatpak is optional and is not part
+of the personal release workflow.
+
+---
+
+The following documentation describes the upstream application.
 
 ![Bazecor screenshot](data/screenshot.png)
 
@@ -29,7 +106,7 @@ Bazecor is beta quality software. There will be bugs, missing features and
 non-obvious things. Reporting any and all of these help us make the software
 better, please feel free to [open issues][issues] liberally!
 
- [issues]: https://github.com/Dygmalab/Bazecor/issues
+ [issues]: https://github.com/chris-pilcher/bazecor-mcp/issues
 
 ## Development
 

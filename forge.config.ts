@@ -11,11 +11,11 @@ import rendererConfig from "./webpack.renderer.config";
 import mainConfig from "./webpack.main.config";
 
 const packagerConfig: ForgePackagerOptions = {
-  appBundleId: "com.dygmalab.bazecor",
+  appBundleId: "dev.chrispilcher.bazecor-mcp",
   darwinDarkModeSupport: true,
   asar: false,
   icon: "./build/logo",
-  name: "Bazecor",
+  name: "Bazecor-MCP",
   osxUniversal: {
     x64ArchFiles: "*",
   },
@@ -63,7 +63,7 @@ const config: ForgeConfig = {
       name: "@reforged/maker-appimage",
       config: {
         options: {
-          bin: "Bazecor",
+          bin: "Bazecor-MCP",
           categories: ["Utility"],
           icon: "./build/logo.png",
         },
@@ -76,8 +76,8 @@ const config: ForgeConfig = {
             {
               options: {
                 id: "com.dygma.bazecor",
-                bin: "Bazecor",
-                productName: "Bazecor",
+                bin: "Bazecor-MCP",
+                productName: "Bazecor MCP",
                 genericName: "Dygma Keyboard Configurator",
                 description: "Configurator for Dygma Raise and Defy keyboards.",
                 icon: "./build/logo.png",
@@ -144,7 +144,8 @@ const config: ForgeConfig = {
   plugins: [
     new WebpackPlugin({
       mainConfig,
-      devContentSecurityPolicy: "connect-src 'self' *.github.com github.com objects.githubusercontent.com 'unsafe-eval';",
+      devContentSecurityPolicy:
+        "connect-src 'self' *.github.com github.com objects.githubusercontent.com 'unsafe-eval';",
       renderer: {
         config: rendererConfig,
         entryPoints: [
@@ -209,11 +210,14 @@ const config: ForgeConfig = {
       }
 
       fs.writeFileSync(path.resolve(buildPath, "package.json"), JSON.stringify(packageJson));
-      spawnSync("yarn", ["install", "--production"], {
+      const install = spawnSync("yarn", ["install", "--production"], {
         cwd: buildPath,
         stdio: "inherit",
         shell: true,
       });
+      if (install.error || install.status !== 0) {
+        throw install.error || new Error(`Packaged native dependency installation failed (${install.status})`);
+      }
 
       const prebuilds = globSync(`${buildPath}/**/prebuilds/*`);
       prebuilds.forEach(function (path) {

@@ -1,12 +1,12 @@
 {
   "name": "Bazecor",
-  "productName": "Bazecor",
+  "productName": "Bazecor MCP",
   "version": "1.11.0",
-  "description": "Bazecor desktop app",
+  "description": "Personal Bazecor fork for local MCP agent control (integration in development)",
   "private": true,
   "repository": {
     "type": "git",
-    "url": "https://github.com/Dygmalab/Bazecor"
+    "url": "https://github.com/chris-pilcher/bazecor-mcp"
   },
   "main": ".webpack/main",
   "scripts": {
@@ -43,7 +43,7 @@
     "name": "Dygma Lab S.L.",
     "email": "contact@dygma.com"
   },
-  "homepage": "https://github.com/Dygmalab/Bazecor",
+  "homepage": "https://github.com/chris-pilcher/bazecor-mcp",
   "engines": {
     "node": ">=22.14.0",
     "npm": ">=10.0.0"
@@ -199,7 +199,7 @@
     "node-mac-permissions": "^2.5.0"
   },
   "build": {
-    "appId": "com.dygmalab.bazecor",
+    "appId": "dev.chrispilcher.bazecor-mcp",
     "artifactName": "${productName}-${version}.${ext}",
     "linux": {
       "target": [
