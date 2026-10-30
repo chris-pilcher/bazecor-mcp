@@ -8,7 +8,9 @@ import Window from "../main/managers/Window";
 import { commandSchema } from "./domain";
 
 // Linux first: do not imply untested named-pipe ACL protection on Windows.
-const root = path.join(os.homedir(), ".bazecor-mcp");
+const root = process.env.BAZECOR_MCP_RUNTIME_DIR
+  ? path.resolve(process.env.BAZECOR_MCP_RUNTIME_DIR)
+  : path.join(os.homedir(), ".bazecor-mcp");
 let server: net.Server | undefined;
 const sockets = new Set<net.Socket>();
 let sequence = 0;
@@ -44,14 +46,34 @@ function stop() {
     /* already absent */
   }
 }
-async function forward(command: unknown) {
+async function forward(command: unknown): Promise<unknown> {
   const parsed = commandSchema.parse(command);
+  if (parsed.operation === "restore_backup") {
+    const current = (await forward({ operation: "read" })) as { revision: string; dirty: boolean };
+    if (current.revision !== parsed.expectedRevision)
+      throw new Error("Revision conflict. Read the current draft before restoring.");
+    if (current.dirty) throw new Error("Save or discard the current draft before restoring hardware");
+  }
   const win = Window.getWindow();
   if (!win || win.isDestroyed())
     throw new Error("Open Bazecor's Layout Editor first. MCP never launches an app or device connection.");
   sequence += 1;
   const id = sequence;
-  if (editorId !== win.webContents.id) throw new Error("Open the Layout Editor first and wait for it to load.");
+  const applicationCommand = [
+    "devices",
+    "telemetry",
+    "app_settings",
+    "app_setting",
+    "backup_convert",
+    "connect",
+    "disconnect",
+    "navigate",
+    "backup_read",
+    "backup_store",
+    "restore_backup",
+  ].includes(parsed.operation);
+  if (!applicationCommand && editorId !== win.webContents.id)
+    throw new Error("Open the Layout Editor first and wait for it to load.");
   lastActivity = `${parsed.operation} at ${new Date().toISOString()}`;
   return new Promise((resolve, reject) => {
     const timer = setTimeout(() => {
@@ -59,7 +81,7 @@ async function forward(command: unknown) {
       reject(new Error("Editor did not respond. Open Layout Editor. Do not retry a save without reading its state."));
     }, 120000);
     pending.set(id, { resolve, reject, timer });
-    win.webContents.send("mcp:command", { id, command: parsed });
+    win.webContents.send(applicationCommand ? "mcp:application" : "mcp:command", { id, command: parsed });
   });
 }
 function start() {

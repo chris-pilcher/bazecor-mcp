@@ -31,6 +31,8 @@
     "test": "vitest",
     "test:type": "tsc && tsc -p tsconfig.strict.json",
     "test:mcp-live": "node scripts/test-mcp-live.cjs",
+    "mcp:schemas": "node scripts/generate-mcp-schemas.cjs",
+    "test:mcp-contract": "node scripts/generate-mcp-schemas.cjs --check",
     "e2e": "yarn playwright test"
   },
   "keywords": [
@@ -128,7 +130,8 @@
     "typescript": "^5.4.5",
     "vite": "^5.4.12",
     "vitest": "^2.1.9",
-    "webpack-cli": "^5.1.4"
+    "webpack-cli": "^5.1.4",
+    "zod-to-json-schema": "3.24.5"
   },
   "dependencies": {
     "@hello-pangea/dnd": "^18.0.1",

@@ -16,6 +16,9 @@
  */
 
 import React, { useState, useEffect, useCallback, useRef } from "react";
+import { flushSync } from "react-dom";
+import { useMcpApplication } from "../mcp/application";
+import { McpControl } from "../mcp/useLiveEditor";
 import { Routes, Navigate, Route, useNavigate } from "react-router-dom";
 import { toast } from "react-toastify";
 import { ThemeProvider } from "styled-components";
@@ -98,7 +101,7 @@ const detectFirmwareCapabilities = async (currentDevice: Device) => {
 
       // Layer Lens needs the firmware to report overlay/layer packets over raw HID,
       // which shipped for Sonsei in 1.0.0 and lands for Defy in 2.3.0 and Raise2 in
-      // 1.5.0 — both still unreleased at the time of writing (latest published are
+      // 1.5.0 -- both still unreleased at the time of writing (latest published are
       // Defy 2.2.1 and Raise2 1.4.1), so Lens stays hidden on those boards until
       // their firmware is out. Raise (Raise1) never exposes Lens, whatever the
       // firmware.
@@ -321,7 +324,10 @@ function App() {
   };
 
   useEffect(() => {
-    const fontFace = new FontFace("Libre Franklin", "@Renderer/theme/fonts/LibreFranklin/LibreFranklin-VariableFont_wght.ttf");
+    const fontFace = new FontFace(
+      "Libre Franklin",
+      "@Renderer/theme/fonts/LibreFranklin/LibreFranklin-VariableFont_wght.ttf",
+    );
     log.verbose("Font face: ", fontFace);
     document.fonts.add(fontFace);
   }, []);
@@ -387,9 +393,12 @@ function App() {
       }
     };
 
-    const usbListener = (event: unknown, response: unknown) => handleDeviceDisconnection(JSON.parse(response as string));
-    const newUsbConnection = (event: unknown, response: unknown) => handleDeviceConnection(JSON.parse(response as string));
-    const hidListener = (event: unknown, response: unknown) => handleDeviceDisconnection(JSON.parse(response as string));
+    const usbListener = (event: unknown, response: unknown) =>
+      handleDeviceDisconnection(JSON.parse(response as string));
+    const newUsbConnection = (event: unknown, response: unknown) =>
+      handleDeviceConnection(JSON.parse(response as string));
+    const hidListener = (event: unknown, response: unknown) =>
+      handleDeviceDisconnection(JSON.parse(response as string));
 
     const notifyBtDevice = (event: any, hidDev: string) => {
       const localDev: HIDNotifdevice = JSON.parse(hidDev);
@@ -496,6 +505,21 @@ function App() {
     store.set("settings.version", version);
   };
 
+  useMcpApplication({
+    state,
+    dispatch,
+    dirty: contextBar,
+    navigate,
+    onConnect: onKeyboardConnect,
+    onDisconnect: onKeyboardDisconnect,
+    setTheme: toggleDarkMode,
+    setLoading,
+    reloadEditor: () => {
+      flushSync(() => navigate("/device-manager"));
+      navigate("/editor");
+    },
+  });
+
   return (
     <ThemeProvider theme={darkMode ? Dark : Light}>
       <GlobalStyles />
@@ -511,6 +535,7 @@ function App() {
         discardChangesButtonRef={discardChangesButtonRef}
       />
       <div className="main-container">
+        <McpControl />
         <Routes>
           <Route path="/" element={<Navigate to="/device-manager" />} />
           <Route path="/welcome" element={<Welcome device={device} onConnect={onKeyboardConnect} />} />

@@ -19,7 +19,7 @@ export const parseKeymapRaw = (keymap: string, keyLayerSize: number): number[][]
       return localResult;
     }, []);
 
-export const serializeKeymap = (keymap: KeyType[][]) =>
+export const serializeKeymap = (keymap: KeyType[][] | number[][]) =>
   keymap
     .flat()
     .map(k => (typeof k === "number" ? String(k) : keymapDB.serialize(k).toString()))

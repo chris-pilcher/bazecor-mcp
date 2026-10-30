@@ -13,3 +13,5 @@ export const parseColormapRaw = (colormap: string, ColorLayerSize: number): numb
       localResult[chunkIndex].push(item);
       return localResult;
     }, []);
+
+export const serializeColormap = (colormap: number[][]): string => colormap.flat().join(" ");

@@ -4,10 +4,23 @@
 > This project is making Bazecor's configuration functions available through the
 > Model Context Protocol (MCP), so an agent can connect to the running desktop app
 > and control the same configuration you see and edit in the UI.
-> **Local MCP control is available for a first set of layout operations:** read
-> the live draft, stage standard key and palette-slot assignments, undo, export a
-> layout snapshot, and explicitly save to hardware. Enable MCP in Layout Editor.
-> [Setup, tool contract, coverage and limitations](docs/MCP.md).
+> **Practical configuration control through MCP:** shared layout, layer, key-action,
+> macro, Superkey, color and preference drafts; device discovery/connection;
+> backups, explicit hardware saves/restores; and app/Layer Lens settings.
+> [Setup, tool contract, coverage and tested limitations](docs/MCP.md).
+
+## MCP access includes hardware writes
+
+**This is an MCP-enabled desktop app, and its MCP tools can write to your connected
+keyboard.** In particular, approving `save_to_keyboard` or `restore_backup` authorizes changes to the
+keyboard's stored configuration. Staging edits alone does not save them, but the
+save tool can change how your keyboard behaves.
+
+**Only enable this MCP connection and approve hardware-write tools if you are
+comfortable giving the connected agent that access.** Use your MCP client's
+per-tool approval controls where available, and require approval for
+`save_to_keyboard` and `restore_backup` if you want to review every hardware write. A recovery backup
+helps recover from mistakes; it does not make hardware writes read-only.
 
 Linux x86-64 AppImage is the primary distribution target. This fork is maintained
 for personal use by Chris Pilcher and is not an official Dygma release. Upstream

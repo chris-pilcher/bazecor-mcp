@@ -4,7 +4,7 @@ const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
 const net = require("node:net");
-const { tools, guide } = require("./contract.cjs");
+const { tools, guide, schemas } = require("./contract.cjs");
 
 function attach(command) {
   return new Promise((resolve, reject) => {
@@ -15,7 +15,9 @@ function attach(command) {
       reject(error);
     };
     try {
-      const root = path.join(os.homedir(), ".bazecor-mcp");
+      const root = process.env.BAZECOR_MCP_RUNTIME_DIR
+        ? path.resolve(process.env.BAZECOR_MCP_RUNTIME_DIR)
+        : path.join(os.homedir(), ".bazecor-mcp");
       const dir = fs.lstatSync(root);
       const info = fs.lstatSync(path.join(root, "connection.json"));
       if (
@@ -102,13 +104,20 @@ async function handle(message) {
         ? params.protocolVersion
         : "2025-03-26",
       capabilities: { tools: {}, resources: {} },
-      serverInfo: { name: "bazecor-live-editor", version: "0.1.0" },
+      serverInfo: { name: "bazecor-live-editor", version: "0.2.0" },
       instructions: guide,
     });
   if (method === "ping") return reply({});
   if (method === "tools/list") return reply({ tools: tools.map(({ operation, ...tool }) => tool) });
   if (method === "resources/list")
-    return reply({ resources: [{ uri: "bazecor://contract", name: "Live editor contract", mimeType: "text/plain" }] });
+    return reply({
+      resources: [
+        { uri: "bazecor://contract", name: "Live editor contract", mimeType: "text/plain" },
+        { uri: "bazecor://schemas", name: "Validated tool schemas", mimeType: "application/json" },
+      ],
+    });
+  if (method === "resources/read" && params.uri === "bazecor://schemas")
+    return reply({ contents: [{ uri: params.uri, mimeType: "application/json", text: JSON.stringify(schemas) }] });
   if (method === "resources/read" && params.uri === "bazecor://contract")
     return reply({ contents: [{ uri: params.uri, mimeType: "text/plain", text: guide }] });
   if (method === "tools/call") {

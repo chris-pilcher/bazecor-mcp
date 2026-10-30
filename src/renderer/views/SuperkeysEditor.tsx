@@ -16,7 +16,7 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "react-toastify";
 import Styled from "styled-components";
 import log from "electron-log/renderer";
@@ -53,7 +53,17 @@ import Store from "@Renderer/utils/Store";
 import getLanguage from "@Renderer/utils/language";
 import Keymap, { KeymapDB } from "../../api/keymap";
 import Backup from "../../api/backup";
-import { parseMacrosRaw, parseSuperkeysRaw, serializeKeymap, serializeSuperkeys } from "../../api/parsers";
+import {
+  parseMacrosRaw,
+  parseSuperkeysRaw,
+  serializeKeymap,
+  serializeMacros,
+  serializeSuperkeys,
+} from "../../api/parsers";
+
+import { importBackup } from "../../mcp/backups";
+import { useLiveEditor } from "../../mcp/useLiveEditor";
+import { baseDraft, catalogFor, commandsFor, recoverySave } from "../../mcp/deviceDraft";
 
 const store = Store.getStore();
 
@@ -94,6 +104,7 @@ function SuperkeysEditor(props: SuperkeysEditorProps) {
   let keymapDB = new KeymapDB();
   const bkp = new Backup();
   const [isSaving, setIsSaving] = useState(false);
+  const saveLock = useRef(false);
   const [mouseWheel, setMouseWheel] = useState(0);
 
   const initialState: SuperkeysEditorInitialStateType = {
@@ -278,45 +289,58 @@ function SuperkeysEditor(props: SuperkeysEditorProps) {
     startContext();
   };
 
-  const writeSuper = async () => {
-    const { setLoading, cancelContext } = props;
-    const { superkeys, modifiedKeymap, keymap, neurons, neuronID } = state;
-    setIsSaving(true);
-    setLoading(true);
+  const writeSuper = async (assertUnchanged: () => void = () => {}) => {
+    if (saveLock.current) return { success: false, error: "Save already in progress" };
+    saveLock.current = true;
     const { currentDevice } = deviceState;
-    const localNeurons = [...neurons];
-    const nIdx = localNeurons.findIndex(n => n.id === neuronID);
-    localNeurons[nIdx].superkeys = superkeys;
-    log.info("Loaded neurons: ", JSON.stringify(localNeurons));
+    setIsSaving(true);
+    props.setLoading(true);
     try {
-      store.set("neurons", localNeurons);
-      // Send superkeys map first (Superkeys Editor requirement)
-      const sendSK = serializeSuperkeys(superkeys);
-      await currentDevice.command("superkeys.map", sendSK);
-      // Then match LayoutEditor.onApply keymap save path (force send without cache)
-      if (keymap && keymap.custom) {
-        await currentDevice?.noCacheCommand("keymap.custom", serializeKeymap(keymap.custom));
-        await currentDevice?.noCacheCommand("keymap.onlyCustom", keymap.onlyCustom ? "1" : "0");
+      await recoverySave(
+        currentDevice,
+        state.neuronID,
+        [
+          () => currentDevice.noCacheCommand("superkeys.map", serializeSuperkeys(state.superkeys)),
+          () => currentDevice.noCacheCommand("keymap.custom", serializeKeymap(state.keymap.custom)),
+          () => currentDevice.noCacheCommand("keymap.onlyCustom", state.keymap.onlyCustom ? "1" : "0"),
+          async () => {
+            if (!commandsFor(currentDevice).includes("macros.map")) return "";
+            const size = await currentDevice.noCacheCommand("macros.memory");
+            if (
+              typeof size !== "string" ||
+              !Number.isInteger(Number(size.trim().split(/\s+/)[0])) ||
+              Number(size.trim().split(/\s+/)[0]) < 1
+            )
+              throw new Error("Could not read macro memory capacity");
+            return currentDevice.noCacheCommand(
+              "macros.map",
+              serializeMacros(state.macros, Number(size.trim().split(/\s+/)[0])),
+            );
+          },
+        ],
+        assertUnchanged,
+      );
+      const neurons = store.get("neurons") as typeof state.neurons;
+      const index = neurons.findIndex(neuron => neuron.id === state.neuronID);
+      if (index >= 0) {
+        neurons[index].macros = state.macros;
+        neurons[index].superkeys = state.superkeys;
+        store.set("neurons", neurons);
       }
-      state.modified = false;
-      state.modifiedKeymap = false;
-      setState({ ...state });
-      log.info("Changes saved.");
-      const commands = await Backup.Commands(currentDevice);
-      const backup = await bkp.DoBackup(commands, neurons[nIdx].id, currentDevice);
+      const backup = await bkp.DoBackup(await Backup.Commands(currentDevice), state.neuronID, currentDevice);
       Backup.SaveBackup(backup, currentDevice);
-      toast.success(<ToastMessage title={i18n.editor.superkeys.successFlashTitle} content="" icon={<IconFloppyDisk />} />, {
-        autoClose: 2000,
-        icon: "",
-      });
-      cancelContext();
-      setLoading(false);
+      setState({ ...state, modified: false, storedMacros: state.macros, storedSuper: state.superkeys });
+      props.cancelContext();
+      return { success: true };
     } catch (error) {
-      toast.error(error);
-      cancelContext();
-      setLoading(false);
+      setState({ ...state, modified: true });
+      toast.error(String(error));
+      return { success: false, error: String(error) };
+    } finally {
+      saveLock.current = false;
+      setIsSaving(false);
+      props.setLoading(false);
     }
-    setIsSaving(false);
   };
 
   const toggleDeleteModal = () => {
@@ -536,9 +560,51 @@ function SuperkeysEditor(props: SuperkeysEditorProps) {
   const code = keymapDB.keySegmentor(tempkey.keyCode);
 
   const listOfSKK = listToDelete.map(({ layer, pos, superIdx }) => (
-    <li key={`${layer}-${pos}-${superIdx}`} className="titles alignvert">{`Key in layer ${layer + 1} and pos ${pos}`}</li>
+    <li
+      key={`${layer}-${pos}-${superIdx}`}
+      className="titles alignvert"
+    >{`Key in layer ${layer + 1} and pos ${pos}`}</li>
   ));
   // if (loading || !Array.isArray(superkeys)) return <LogoLoaderCentered />;
+  const mcpCatalog = catalogFor(deviceState.currentDevice, keymapDB);
+  useLiveEditor({
+    importBackup: (backup, draft) => importBackup(deviceState.currentDevice, backup, draft),
+    ready: !loading && !!state.keymap,
+    saving: isSaving,
+    catalog: mcpCatalog,
+    draft: {
+      ...baseDraft(deviceState.currentDevice, state.neuronID, "superkeys"),
+      keys: state.keymap?.custom.map(row => row.map(key => key.keyCode)) || [],
+      defaultKeys: state.keymap?.default.map(row => row.map(key => key.keyCode)) || [],
+      onlyCustom: state.keymap?.onlyCustom ?? true,
+      defaultLayerCount: state.keymap?.default.length || 0,
+      dirty: state.modified,
+      selectedDefinition: state.selectedSuper,
+      macros: state.macros,
+      superkeys: state.superkeys,
+      limits: {
+        macros: 128,
+        superkeys: 70,
+        macroActions: deviceState.currentDevice?.device?.info?.product === "Raise" ? 4096 : 100,
+        macroBytes: undefined,
+      },
+    },
+    apply: draft => {
+      setState({
+        ...state,
+        keymap: { ...state.keymap, custom: draft.keys.map(row => row.map(code => keymapDB.parse(code))) },
+        macros: draft.macros,
+        superkeys: draft.superkeys,
+        selectedSuper: Math.max(0, Math.min(state.selectedSuper, (draft.superkeys?.length || 1) - 1)),
+        modified: draft.dirty,
+        modifiedKeymap: true,
+      });
+      if (draft.dirty) props.startContext();
+      else props.cancelContext();
+    },
+    save: writeSuper,
+  });
+
   if (loading || !Array.isArray(superkeys)) return <LogoLoader centered />;
   return (
     <Styles className="superkeys px-3">
@@ -562,7 +628,9 @@ function SuperkeysEditor(props: SuperkeysEditorProps) {
               <MacrosMemoryUsage context="superkeys" mem={superkeys.length} tMem={MAX_SUPERKEYS} warningOffset={0} />
             </>
           }
-          saveContext={writeSuper}
+          saveContext={async () => {
+            await writeSuper();
+          }}
           destroyContext={destroyThisContext}
           inContext={modified}
           isSaving={isSaving}
@@ -618,13 +686,15 @@ function SuperkeysEditor(props: SuperkeysEditorProps) {
                   The superkey you want to delete is currently in use on:
                 </Heading>
                 <div className="mt-1 mb-4">
-                  <ul className="mb-[4px] text-ssm list-disc pl-[24px] text-gray-500 dark:text-gray-100">{listOfSKK}</ul>
+                  <ul className="mb-[4px] text-ssm list-disc pl-[24px] text-gray-500 dark:text-gray-100">
+                    {listOfSKK}
+                  </ul>
                 </div>
               </>
             )}
             <p className="text-sm text-gray-500 dark:text-gray-25">
-              By pressing <strong>Remove</strong> you will replace those superkeys with <strong>NO KEY</strong> on the keyboard
-              layout.
+              By pressing <strong>Remove</strong> you will replace those superkeys with <strong>NO KEY</strong> on the
+              keyboard layout.
             </p>
           </div>
           <DialogFooter>

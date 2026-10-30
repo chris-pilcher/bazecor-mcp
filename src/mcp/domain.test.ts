@@ -52,13 +52,7 @@ describe("live editor domain", () => {
   });
   it("rejects invalid palette slots, unsupported routes and disconnected edits", () => {
     expect(() => preflight(draft(), [{ kind: "color", layer: 0, led: 0, palette: 2 }])).toThrow();
-    expect(() =>
-      commandSchema.parse({
-        operation: "batch",
-        expectedRevision: "r",
-        edits: [{ kind: "key", layer: 0, key: 0, keyCode: 17451 }],
-      }),
-    ).toThrow();
+    expect(() => preflight(draft(), [{ kind: "key", layer: 0, key: 0, keyCode: 17451 }])).toThrow();
     expect(() =>
       preflight({ ...draft(), connected: false }, [{ kind: "key", layer: 0, key: 0, keyCode: 5 }]),
     ).toThrow();

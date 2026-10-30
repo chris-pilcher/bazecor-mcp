@@ -1,7 +1,7 @@
 // Parsers
 import { parseKeymapRaw, serializeKeymap } from "./keymap";
-import { parsePaletteRaw } from "./palette";
-import { parseColormapRaw } from "./colormap";
+import { parsePaletteRaw, serializePalette } from "./palette";
+import { parseColormapRaw, serializeColormap } from "./colormap";
 import { parseMacrosRaw, serializeMacros } from "./macros";
 import { parseSuperkeysRaw, serializeSuperkeys } from "./superkeys";
 
@@ -14,6 +14,8 @@ export {
   parseKeymapRaw,
   serializeKeymap,
   parsePaletteRaw,
+  serializePalette,
+  serializeColormap,
   parseColormapRaw,
   parseMacrosRaw,
   serializeMacros,

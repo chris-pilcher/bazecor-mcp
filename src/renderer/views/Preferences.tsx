@@ -16,7 +16,7 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import { ipcRenderer } from "electron";
 import { motion } from "framer-motion";
 import log from "electron-log/renderer";
@@ -67,6 +67,11 @@ import LogoLoader from "@Renderer/components/atoms/loader/LogoLoader";
 import { Neuron } from "@Renderer/types/neurons";
 import Backup from "../../api/backup";
 import { delay } from "../../api/flash/delay";
+
+import { importBackup } from "../../mcp/backups";
+import { useLiveEditor } from "../../mcp/useLiveEditor";
+import { baseDraft, recoverySave } from "../../mcp/deviceDraft";
+import { preferenceDraft, applyPreferences, preferenceWrites } from "../../mcp/settings";
 
 const store = Store.getStore();
 
@@ -148,6 +153,8 @@ const Preferences = (props: PreferencesProps) => {
   const [bkp] = useState(new Backup());
   const [modified, setModified] = useState(false);
   const [localloading, setLocalLoading] = useState(true);
+  const [mcpSaving, setMcpSaving] = useState(false);
+  const saveLock = useRef(false);
 
   // Keyboard & App Prefrerences data storage
   const [wireless, setWireless] = useState<WirelessInterface>(initialWireless);
@@ -231,9 +238,8 @@ const Preferences = (props: PreferencesProps) => {
 
         if (typeof minHoldParsed === "number" && minHoldParsed > 255) {
           clampedMinHold = 255;
-          if (state.currentDevice) {
-            await state.currentDevice.command("qukeys.minimumHoldTime", "255");
-          }
+          // Reading preferences must not silently write hardware. The clamped
+          // value is sent only through the explicit save path.
         }
 
         newKbData.qukeysMinHold = clampedMinHold;
@@ -351,7 +357,7 @@ const Preferences = (props: PreferencesProps) => {
       });
       await state.currentDevice.command("idleleds.true_sleep").then((trueSleep: string) => {
         // Boards that don't expose true sleep (Sonsei) always read as off, whatever
-        // the firmware reports — the card is hidden for them, so a stale "1" would
+        // the firmware reports -- the card is hidden for them, so a stale "1" would
         // be a setting the user can neither see nor turn back off.
         newWireless.true_sleep = hasTrueSleep && trueSleep ? parseInt(trueSleep, 10) === 1 : false;
       });
@@ -394,69 +400,6 @@ const Preferences = (props: PreferencesProps) => {
     setLoading(false);
   }, [setLoading, state.currentDevice]);
 
-  const saveKeymapChanges = async () => {
-    if (state.currentDevice) {
-      await state.currentDevice.command("keymap.onlyCustom", kbData.keymap.onlyCustom.toString());
-      await state.currentDevice.command("settings.defaultLayer", kbData.defaultLayer.toString());
-      await state.currentDevice.command("led.brightness", kbData.ledBrightness.toString());
-      await state.currentDevice.command("led.brightnessUG", kbData.ledBrightnessUG.toString());
-      if (kbData.ledIdleTimeLimit >= 0)
-        await state.currentDevice.command("idleleds.time_limit", kbData.ledIdleTimeLimit.toString());
-      store.set("settings.showDefaults", kbData.showDefaults);
-      // QUKEYS
-      await state.currentDevice.command("qukeys.holdTimeout", kbData.qukeysHoldTimeout.toString());
-      await state.currentDevice.command("qukeys.overlapThreshold", kbData.qukeysOverlapThreshold.toString());
-
-      let minHoldValueToSend = "";
-      if (typeof kbData.qukeysMinHold === "number" && kbData.qukeysMinHold > 0) {
-        const clamped = kbData.qukeysMinHold > 255 ? 255 : kbData.qukeysMinHold;
-        minHoldValueToSend = clamped.toString();
-      }
-      await state.currentDevice.command("qukeys.minimumHoldTime", minHoldValueToSend);
-      await state.currentDevice.command(
-        "qukeys.minimumPriorInterval",
-        kbData.qukeysMinPrior ? kbData.qukeysMinPrior.toString() : "",
-      );
-      // SUPER KEYS
-      await state.currentDevice.command("superkeys.timeout", kbData.SuperTimeout.toString());
-      await state.currentDevice.command("superkeys.repeat", kbData.SuperRepeat.toString());
-      await state.currentDevice.command("superkeys.waitfor", kbData.SuperWaitfor.toString());
-      await state.currentDevice.command("superkeys.holdstart", kbData.SuperHoldstart.toString());
-      await state.currentDevice.command("superkeys.overlap", kbData.SuperOverlapThreshold.toString());
-      // MOUSE KEYS
-      await state.currentDevice.command("mouse.speed", kbData.mouseSpeed.toString());
-      await state.currentDevice.command("mouse.speedDelay", kbData.mouseSpeedDelay.toString());
-      await state.currentDevice.command("mouse.accelSpeed", kbData.mouseAccelSpeed.toString());
-      await state.currentDevice.command("mouse.accelDelay", kbData.mouseAccelDelay.toString());
-      await state.currentDevice.command("mouse.wheelSpeed", kbData.mouseWheelSpeed.toString());
-      await state.currentDevice.command("mouse.wheelDelay", kbData.mouseWheelDelay.toString());
-      await state.currentDevice.command("mouse.speedLimit", kbData.mouseSpeedLimit.toString());
-    }
-  };
-
-  const saveWirelessChanges = async () => {
-    if (state.currentDevice) {
-      const hasTrueSleep = supportsTrueSleep(state.currentDevice.device.info.product as string);
-      // Commands to be sent to the keyboard
-      await state.currentDevice.command("wireless.battery.savingMode", wireless.battery.savingMode ? "1" : "0");
-      await state.currentDevice.command("wireless.bluetooth.deviceName", wireless.bluetooth.deviceName);
-      await state.currentDevice.command("wireless.rf.channelHop", wireless.rf.channelHop.toString());
-      await state.currentDevice.command("wireless.rf.power", wireless.rf.power.toString());
-
-      await state.currentDevice.command("led.brightness.wireless", wireless.brightness.toString());
-      await state.currentDevice.command("led.brightnessUG.wireless", wireless.brightnessUG.toString());
-      await state.currentDevice.command("led.fade", wireless.fade.toString());
-      await state.currentDevice.command("idleleds.wireless", wireless.idleleds.toString());
-
-      await state.currentDevice.command("led.brightness.wireless", wireless.brightness.toString());
-      await state.currentDevice.command("led.brightnessUG.wireless", wireless.brightnessUG.toString());
-      await state.currentDevice.command("led.fade", wireless.fade.toString());
-      await state.currentDevice.command("idleleds.wireless", wireless.idleleds.toString());
-      await state.currentDevice.command("idleleds.true_sleep", hasTrueSleep && wireless.true_sleep ? "1" : "0");
-      await state.currentDevice.command("idleleds.true_sleep_time", wireless.true_sleep_time.toString());
-    }
-  };
-
   const destroyContext = async () => {
     setPreferencesState(initialPreferences);
     setKbData(initialKBData);
@@ -470,50 +413,34 @@ const Preferences = (props: PreferencesProps) => {
     cancelContext();
   };
 
-  const saveContext = async () => {
+  const saveContext = async (assertUnchanged: () => void = () => {}) => {
+    if (saveLock.current) return { success: false, error: "Save already in progress" };
+    saveLock.current = true;
+    setMcpSaving(true);
     setLoading(true);
-    await delay(250);
-
     try {
-      await saveKeymapChanges();
-      await saveWirelessChanges();
-
+      await recoverySave(
+        state.currentDevice,
+        preferencesState.neuronID,
+        preferenceWrites(state.currentDevice, kbData, wireless),
+        assertUnchanged,
+      );
+      store.set("settings.showDefaults", kbData.showDefaults);
       const commands = await Backup.Commands(state.currentDevice);
       const backup = await bkp.DoBackup(commands, preferencesState.neuronID, state.currentDevice);
       Backup.SaveBackup(backup, state.currentDevice);
-
-      toast.success(<ToastMessage title={i18n.success.preferencesSaved} icon={<IconFloppyDisk />} />, {
-        position: "top-right",
-        autoClose: 5000,
-        hideProgressBar: false,
-        closeOnClick: true,
-        pauseOnHover: true,
-        draggable: true,
-        progress: undefined,
-        icon: "",
-      });
+      setModified(false);
+      cancelContext();
+      return { success: true };
     } catch (error) {
-      log.error(error);
-      toast.error(
-        <ToastMessage
-          title={i18n.errors.preferenceFailOnSave}
-          content={i18n.errors.preferenceFailOnSaveBody}
-          icon={<IconFloppyDisk />}
-        />,
-        {
-          position: "top-right",
-          autoClose: 5000,
-          hideProgressBar: false,
-          closeOnClick: true,
-          pauseOnHover: true,
-          draggable: true,
-          progress: undefined,
-          icon: "",
-        },
-      );
+      setModified(true);
+      toast.error(String(error));
+      return { success: false, error: String(error) };
+    } finally {
+      saveLock.current = false;
+      setMcpSaving(false);
+      setLoading(false);
     }
-    await destroyContext();
-    setLoading(false);
   };
 
   const updateKBData = (newKbData: KBDataPref) => {
@@ -656,7 +583,10 @@ const Preferences = (props: PreferencesProps) => {
       setLoading(true);
       updateAutoUpdate(undefined);
       const NID = await getNeuronData();
-      if (connected && (state.currentDevice.device.info.keyboardType === "wireless" || state.currentDevice.device.wireless))
+      if (
+        connected &&
+        (state.currentDevice.device.info.keyboardType === "wireless" || state.currentDevice.device.wireless)
+      )
         await getWirelessPreferences();
       const devTools = await ipcRenderer.invoke("is-devtools-opened");
       let darkMode = store.get("settings.darkMode") as string;
@@ -669,7 +599,9 @@ const Preferences = (props: PreferencesProps) => {
         devTools,
         darkMode,
         verbose,
-        selectedNeuron: prevPreferencesState.neurons.indexOf(prevPreferencesState.neurons.find((x: Neuron) => x.id === NID)),
+        selectedNeuron: prevPreferencesState.neurons.indexOf(
+          prevPreferencesState.neurons.find((x: Neuron) => x.id === NID),
+        ),
       }));
 
       ipcRenderer.on("opened-devtool", openDevTool);
@@ -695,6 +627,26 @@ const Preferences = (props: PreferencesProps) => {
   const { neurons, selectedNeuron, darkMode, neuronID, devTools, verbose } = preferencesState;
   const { defaultLayer } = kbData;
 
+  useLiveEditor({
+    importBackup: (backup, draft) => importBackup(state.currentDevice, backup, draft),
+    ready: !localloading && !!state.currentDevice,
+    saving: mcpSaving,
+    draft: {
+      ...baseDraft(state.currentDevice, preferencesState.neuronID, "preferences"),
+      dirty: modified,
+      ...preferenceDraft(state.currentDevice, kbData, wireless),
+    },
+    apply: draft => {
+      const next = applyPreferences(kbData, wireless, draft);
+      setKbData(next.kb);
+      setWireless(next.wireless);
+      setModified(draft.dirty);
+      if (draft.dirty) startContext();
+      else cancelContext();
+    },
+    save: saveContext,
+  });
+
   if (localloading)
     return (
       <div className="flex place-content-center h-full">
@@ -710,7 +662,9 @@ const Preferences = (props: PreferencesProps) => {
         text={i18n.preferences.title}
         showSaving
         contentSelector={false}
-        saveContext={saveContext}
+        saveContext={async () => {
+          await saveContext();
+        }}
         destroyContext={destroyContext}
         inContext={modified}
         isSaving={localloading}
@@ -744,7 +698,8 @@ const Preferences = (props: PreferencesProps) => {
                   <TabsTrigger value="LED" variant="tab">
                     <IconFlashlight /> LED
                   </TabsTrigger>
-                  {(state.currentDevice.device.info.keyboardType === "wireless" || state.currentDevice.device.wireless) && (
+                  {(state.currentDevice.device.info.keyboardType === "wireless" ||
+                    state.currentDevice.device.wireless) && (
                     <>
                       <TabsTrigger value="Battery" variant="tab">
                         <IconBattery /> Battery
@@ -820,7 +775,8 @@ const Preferences = (props: PreferencesProps) => {
                         setWireless={updateWireless}
                         connected={connected}
                         isWireless={
-                          state.currentDevice.device.info.keyboardType === "wireless" || state.currentDevice.device.wireless
+                          state.currentDevice.device.info.keyboardType === "wireless" ||
+                          state.currentDevice.device.wireless
                         }
                         hasUnderglow={
                           (state.currentDevice.device.keyboardUnderglow?.ledsLeft?.length || 0) > 0 ||
@@ -829,11 +785,17 @@ const Preferences = (props: PreferencesProps) => {
                       />
                     </motion.div>
                   </TabsContent>
-                  {(state.currentDevice.device.info.keyboardType === "wireless" || state.currentDevice.device.wireless) && (
+                  {(state.currentDevice.device.info.keyboardType === "wireless" ||
+                    state.currentDevice.device.wireless) && (
                     <>
                       <TabsContent value="Battery">
                         <motion.div initial="hidden" animate="visible" variants={tabVariants}>
-                          <BatterySettings wireless={wireless} changeWireless={updateWireless} isCharging={false} deviceType={state.currentDevice.device.info.product as string} />
+                          <BatterySettings
+                            wireless={wireless}
+                            changeWireless={updateWireless}
+                            isCharging={false}
+                            deviceType={state.currentDevice.device.info.product as string}
+                          />
                           <EnergyManagement
                             wireless={wireless}
                             changeWireless={updateWireless}
@@ -850,7 +812,11 @@ const Preferences = (props: PreferencesProps) => {
                       {state.currentDevice.device.hasRF && (
                         <TabsContent value="RF">
                           <motion.div initial="hidden" animate="visible" variants={tabVariants}>
-                            <RFSettings wireless={wireless} changeWireless={updateWireless} sendRePair={sendRePairCommand} />
+                            <RFSettings
+                              wireless={wireless}
+                              changeWireless={updateWireless}
+                              sendRePair={sendRePairCommand}
+                            />
                           </motion.div>
                         </TabsContent>
                       )}

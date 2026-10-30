@@ -54,6 +54,17 @@ describe("authenticated local IPC", () => {
     const read = await companion.attach({ operation: "read" });
     expect(read).toMatchObject({ deviceId: "mock" });
     await expect(companion.attach({ operation: "shell", command: "whoami" })).rejects.toThrow();
+    const before = mocks.web.send.mock.calls.length;
+    await expect(
+      companion.attach({
+        operation: "restore_backup",
+        expectedRevision: "stale",
+        deviceId: "mock",
+        confirm: true,
+        backup: { neuron: { device: { info: { product: "Raise", keyboardType: "ANSI" } } }, backup: [] },
+      }),
+    ).rejects.toThrow(/Revision conflict/);
+    expect(mocks.web.send.mock.calls.slice(before).every(call => call[0] === "mcp:command")).toBe(true);
     control({ sender: mocks.web }, false);
     expect(fs.existsSync(location)).toBe(false);
     await expect(companion.attach({ operation: "read" })).rejects.toThrow(/Enable local MCP/);

@@ -26,9 +26,13 @@ merging upstream. The deliberate upstream touchpoints are:
 - `src/api/backup/Backup.ts`: optional distinct recovery filenames, preventing
   the normal post-save backup from overwriting the pre-write recovery snapshot.
 - `src/main/index.ts`: import and call `configureMcp()` once on startup.
-- `src/renderer/views/LayoutEditor.tsx`: invoke the adapter hook, display its
-  control panel, share the key picker state application path, and strengthen the
-  existing save handler with recovery and explicit error checks.
+- `src/renderer/App.tsx`: the opt-in panel and bounded app/device/navigation adapter.
+- `src/renderer/views/{LayoutEditor,MacroEditor,SuperkeysEditor,Preferences}.tsx`:
+  invoke the draft adapter and reuse shared recovery/save helpers. Keep the UI
+  draft authoritative and reject navigation while dirty.
+- `src/api/parsers/`: share palette/colormap serializers, support numeric keymaps,
+  and preserve interval payloads/zero bytes in macro round trips. These codec
+  changes deserve particular attention during upstream merges.
 - `forge.config.ts`: bundle `mcp/`, distinguish the executable/app identity and
   check native dependency installation failures.
 - Package metadata, version/footer branding and automatic updater configuration:
@@ -52,6 +56,7 @@ A small adapter is easier to merge, but does not eliminate semantic regressions.
 
 ```sh
 yarn install --frozen-lockfile
+yarn test:mcp-contract
 yarn test --run
 yarn tsc --noEmit --skipLibCheck
 yarn exec prettier --check src/mcp mcp

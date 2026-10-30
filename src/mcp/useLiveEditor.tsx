@@ -1,9 +1,15 @@
 import React, { useLayoutEffect, useEffect, useRef, useState } from "react";
 import { ipcRenderer } from "electron";
+import { ActionDescriptor, assertAction } from "./actions";
+import { publicDraft, draftDiff } from "./diff";
+import { validateDefinitions } from "./definitions";
 import { Command, commandSchema, Draft, DraftSession, preflight, validateDraft } from "./domain";
 
 interface Adapter {
   draft: Draft;
+  catalog?: ActionDescriptor[];
+  validate?: (draft: Draft) => void;
+  importBackup?: (backup: unknown, draft: Draft) => { draft: Draft; ignoredCommands: string[] };
   ready: boolean;
   saving: boolean;
   apply: (draft: Draft) => void;
@@ -49,29 +55,90 @@ export function useLiveEditor(adapter: Adapter) {
     busy.current = true;
     try {
       const current = session.current.read();
-      if (command.operation === "read") return current;
+      if (command.operation === "read")
+        return { ...publicDraft(current, command.includePrivate), revision: current.revision };
+      if (command.operation === "catalog") {
+        const entries = (latest.current.catalog || []).filter(
+          action =>
+            !command.query ||
+            `${action.category} ${action.label} ${action.id}`.toLowerCase().includes(command.query.toLowerCase()),
+        );
+        const cursor = command.cursor || 0;
+        const limit = command.limit || 100;
+        return {
+          actions: entries.slice(cursor, cursor + limit),
+          total: entries.length,
+          nextCursor: cursor + limit < entries.length ? cursor + limit : null,
+        };
+      }
+      if (command.operation === "decode")
+        return {
+          actions: command.codes.map(
+            code => (latest.current.catalog || []).find(action => action.code === code) || { code, supported: false },
+          ),
+        };
+      if (command.operation === "diff")
+        return draftDiff(session.current.baselineDraft() || current, current, command.includePrivate);
+      if (["devices", "connect", "disconnect", "navigate", "backup_read", "backup_store"].includes(command.operation))
+        throw new Error("Application command routed to the wrong handler");
       if (command.operation === "export")
         return {
           format: "bazecor-mcp-layout-draft-v1",
-          draft: current,
+          draft: publicDraft(current, command.includePrivate),
           note: "Layout snapshot only, not a full hardware recovery backup. No macro text included.",
         };
+      if (!("expectedRevision" in command)) throw new Error("Unsupported editor operation");
       session.current.check(command.expectedRevision);
       if (!current.connected) throw new Error("Device disconnected");
-      if (command.operation === "batch") await apply(preflight(current, command.edits));
+      const { catalog } = latest.current;
+      const validateCode = catalog ? (code: number, draft: Draft) => assertAction(code, draft, catalog) : undefined;
+      if (command.operation === "batch") {
+        const next = preflight(current, command.edits, validateCode);
+        latest.current.validate?.(next);
+        await apply(next);
+      }
+      if (command.operation === "backup_import" || command.operation === "backup_compare") {
+        if (!latest.current.importBackup) throw new Error("Backup import is unavailable in this view");
+        const staged = latest.current.importBackup(command.backup, current);
+        validateDraft(staged.draft);
+        validateDefinitions(staged.draft, validateCode);
+        latest.current.validate?.(staged.draft);
+        if (command.operation === "backup_compare")
+          return {
+            valid: true,
+            diff: draftDiff(current, staged.draft),
+            ignoredCommands: staged.ignoredCommands,
+            note: "No draft or hardware changes were made.",
+          };
+        await apply(staged.draft);
+        const updated = session.current.read();
+        return {
+          ...publicDraft(updated),
+          revision: updated.revision,
+          diff: draftDiff(current, updated),
+          ignoredCommands: staged.ignoredCommands,
+          note: "Only this editor's supported fields were staged; no hardware commands were executed.",
+        };
+      }
+      if (command.operation === "discard") await apply(session.current.discard());
       if (command.operation === "undo") await apply(session.current.undo());
       if (command.operation === "save") {
         validateDraft(current);
-        if (current.virtual)
-          throw new Error(
-            "MCP hardware save is disabled for virtual devices. Use draft edits and undo to test; save is verified with mocked transport.",
-          );
+        validateDefinitions(current, validateCode);
+        latest.current.validate?.(current);
         const result = await latest.current.save(() => session.current.check(command.expectedRevision));
         if (!result.success)
           throw new Error(result.error || "Save failed. Draft retained; hardware may have been partially updated.");
         await commitAfter(() => refresh(value => value + 1));
       }
-      return { ...session.current.read(), validation: { valid: true }, operation: command.operation };
+      const updated = session.current.read();
+      return {
+        ...publicDraft(updated),
+        revision: updated.revision,
+        validation: { valid: true },
+        operation: command.operation,
+        diff: draftDiff(current, updated),
+      };
     } finally {
       busy.current = false;
     }

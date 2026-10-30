@@ -44,6 +44,8 @@ jobs:
           restore-keys: yarn-linux-x64-
       - name: Install dependencies
         run: yarn install --frozen-lockfile --network-timeout 300000
+      - name: Verify generated MCP contract
+        run: yarn test:mcp-contract
       - name: Run unit tests
         run: yarn test --run
       - name: Build Linux x64 AppImage
@@ -122,4 +124,4 @@ jobs:
             --title "Bazecor MCP $RELEASE_TAG" \
             --generate-notes \
             "${prerelease[@]}" \
-            --notes 'Personal, unofficial Bazecor fork. Linux x86-64 AppImage. Local MCP layout control is available; consult the README at this tag for setup and supported operations. Download the AppImage and SHA256SUMS, verify with sha256sum --check SHA256SUMS, then chmod +x the AppImage and run it.'
+            --notes 'Personal, unofficial Bazecor fork. Linux x86-64 AppImage. Local MCP control includes layouts, macros, Superkeys, preferences, backups and hardware writes; consult the README at this tag for setup and supported operations. Download the AppImage and SHA256SUMS, verify with sha256sum --check SHA256SUMS, then chmod +x the AppImage and run it.'

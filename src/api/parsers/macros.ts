@@ -6,63 +6,32 @@ const macrosEraser = (tMem: number) => Array(tMem).fill("255").join(" ");
 
 export const parseMacrosRaw = (raw: string, storedMacros?: MacrosType[]) => {
   const keymapDB = new KeymapDB();
-  const macrosArray = raw.split(" 0 0")[0].split(" ").map(Number);
-
-  // Translate received macros to human readable text
+  const macrosArray = raw.trim().split(/\s+/).filter(Boolean).map(Number);
+  if (macrosArray.some(byte => !Number.isInteger(byte) || byte < 0 || byte > 255))
+    throw new Error("Invalid macro byte stream");
   const macros: MacrosType[] = [];
   let iter = 0;
-  // macros are `0` terminated or when end of macrosArray has been reached, the outer loop
-  // must cycle once more than the inner
-  while (iter <= macrosArray.length) {
-    let actions: MacroActionsType[] = [];
-    while (iter < macrosArray.length) {
-      const type = macrosArray[iter];
-      if (type === 0) {
-        break;
-      }
-
-      switch (type) {
-        case 1:
-          actions.push({
-            type,
-            keyCode: [
-              (macrosArray[(iter += 1)] << 8) + macrosArray[(iter += 1)],
-              (macrosArray[(iter += 1)] << 8) + macrosArray[(iter += 1)],
-            ],
-          });
-          break;
-        case 2:
-        case 3:
-        case 4:
-        case 5:
-          actions.push({ type, keyCode: (macrosArray[(iter += 1)] << 8) + macrosArray[(iter += 1)] });
-          break;
-        case 6:
-        case 7:
-        case 8:
-          actions.push({ type, keyCode: macrosArray[(iter += 1)] });
-          break;
-        default:
-          break;
-      }
-
-      iter += 1;
+  while (iter < macrosArray.length && macrosArray[iter] !== 255) {
+    const actions: MacroActionsType[] = [];
+    while (iter < macrosArray.length && macrosArray[iter] !== 0) {
+      const type = macrosArray[iter++];
+      const width = type === 1 ? 4 : type >= 2 && type <= 5 ? 2 : type >= 6 && type <= 8 ? 1 : -1;
+      if (width < 0) throw new Error(`Unsupported macro opcode ${type}`);
+      if (iter + width > macrosArray.length) throw new Error("Truncated macro action");
+      let keyCode: number | number[];
+      if (type === 1)
+        keyCode = [
+          (macrosArray[iter] << 8) + macrosArray[iter + 1],
+          (macrosArray[iter + 2] << 8) + macrosArray[iter + 3],
+        ];
+      else keyCode = width === 2 ? (macrosArray[iter] << 8) + macrosArray[iter + 1] : macrosArray[iter];
+      iter += width;
+      actions.push({ type, keyCode });
     }
-    actions = actions.filter(a => {
-      let result;
-      if (Array.isArray(a.keyCode)) {
-        a.keyCode.filter(k => !Number.isNaN(k));
-      } else {
-        result = !Number.isNaN(a.keyCode);
-      }
-      return result;
-    });
-    macros.push({
-      actions,
-      name: "",
-      macro: "",
-    });
+    if (iter >= macrosArray.length) throw new Error("Missing macro terminator");
     iter += 1;
+    macros.push({ actions, name: "", macro: "" });
+    if (macrosArray[iter] === 0) break;
   }
   macros.forEach((m, idx) => {
     const aux = m;

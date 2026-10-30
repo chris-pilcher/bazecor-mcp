@@ -1,4 +1,4 @@
-import { rgbw2b } from "../color";
+import { rgb2w, RGB, rgbw2b } from "../color";
 
 export const parsePaletteRaw = (palette: string, isRGBW: boolean) =>
   isRGBW
@@ -45,3 +45,13 @@ export const parsePaletteRaw = (palette: string, isRGBW: boolean) =>
           b: color[2],
           rgb: `rgb(${color[0]}, ${color[1]}, ${color[2]})`,
         }));
+
+// Shared by the UI and MCP recovery path; preserve the firmware channel order.
+export const serializePalette = (palette: RGB[], isRGBW: boolean): string =>
+  palette
+    .flatMap(color => {
+      if (!isRGBW) return [color.r, color.g, color.b];
+      const value = rgb2w(color);
+      return [value.r, value.g, value.b, value.w];
+    })
+    .join(" ");

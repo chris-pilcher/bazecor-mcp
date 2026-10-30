@@ -63,7 +63,6 @@ import { ClearLayerDialog } from "@Renderer/components/molecules/CustomModal/Cle
 import { DygmaDeviceInfoType } from "@Renderer/types/dygmaDefs";
 import BlankTable from "../../api/keymap/db/blanks";
 import Keymap, { KeymapDB } from "../../api/keymap";
-import { rgb2w } from "../../api/color";
 import Backup from "../../api/backup";
 import {
   convertColormapRtoR2,
@@ -74,10 +73,13 @@ import {
   parsePaletteRaw,
   parseSuperkeysRaw,
   serializeKeymap,
+  serializePalette,
+  serializeColormap,
 } from "../../api/parsers";
 
-import { McpControl, useLiveEditor } from "../../mcp/useLiveEditor";
-import { saveWithRecovery } from "../../mcp/domain";
+import { importBackup } from "../../mcp/backups";
+import { useLiveEditor } from "../../mcp/useLiveEditor";
+import { catalogFor, commandsFor, recoverySave } from "../../mcp/deviceDraft";
 
 const store = Store.getStore();
 
@@ -535,10 +537,8 @@ const LayoutEditor = (props: LayoutEditorProps) => {
       name: newName,
     };
     setLayerNames(slicedLayerNames);
-    const neurons = store.get("neurons") as Neuron[];
-    log.info(`changed layer ${currentLayer} name to: ${newName}`, slicedLayerNames, neuronID, neurons);
-    neurons[neurons.findIndex(x => x.id === neuronID)].layers = slicedLayerNames;
-    store.set("neurons", neurons);
+    setModified(true);
+    startContext();
   };
 
   const getColormap = useCallback(async (): Promise<ColormapType> => {
@@ -582,28 +582,14 @@ const LayoutEditor = (props: LayoutEditorProps) => {
     };
   }, [state]);
 
-  const flatten = (arr: Array<unknown>) => [].concat(...arr);
+  const flatten = <T,>(array: T[][]): T[] => array.flat();
 
-  const updatePalette = async (device: DeviceClass, plette: PaletteType[]) => {
-    let args: string[];
-    if (state.currentDevice?.device.RGBWMode !== true) {
-      args = flatten(plette.map(color => [color.r, color.g, color.b])).map(v => v.toString());
-    } else {
-      const paletteAux = plette.map(color => {
-        const aux = rgb2w({ r: color.r, g: color.g, b: color.b });
-        return aux;
-      });
-      args = flatten(paletteAux.map(color => [color.r, color.g, color.b, color.w])).map(v => v.toString());
-      // log.info(plette, paletteAux, args);
-    }
-
-    const result = await device.noCacheCommand("palette", ...args);
-    return result;
-  };
+  const updatePalette = async (device: DeviceClass, colors: PaletteType[]) =>
+    device.noCacheCommand("palette", serializePalette(colors, state.currentDevice?.device.RGBWMode === true));
 
   const updateColormap = async (device: DeviceClass, colormap: number[][]) => {
     const { currentDevice } = state;
-    const args = flatten(colormap).map(v => v.toString());
+    const args = [serializeColormap(colormap)];
     // check if colormap has the left side updated
     if (leftSideModified && currentDevice.type === "hid") {
       toast.warn(
@@ -936,24 +922,17 @@ const LayoutEditor = (props: LayoutEditorProps) => {
       if (!currentDevice || currentDevice.isClosed) throw new Error("Device disconnected");
       setLoading(true);
       setIsSaving(true);
-      await saveWithRecovery(async () => {
-        if (currentDevice.type !== "virtual") {
-          // Read actual hardware for recovery, bypassing potentially stale cached values.
-          const recoveryDevice = Object.create(currentDevice);
-          recoveryDevice.command = currentDevice.noCacheCommand.bind(currentDevice);
-          const commands = await Backup.Commands(recoveryDevice);
-          const recovery = await bkp.DoBackup(commands, neuronID, recoveryDevice);
-          if (!recovery || recovery.backup.some(entry => typeof entry.data !== "string"))
-            throw new Error("Recovery backup failed");
-          if (!Backup.SaveBackup(recovery, currentDevice, true)) throw new Error("Could not store recovery backup");
-        }
-        assertUnchanged();
-      }, [
-        () => currentDevice.noCacheCommand("keymap.custom", serializeKeymap(keymap.custom)),
-        () => currentDevice.noCacheCommand("keymap.onlyCustom", keymap.onlyCustom ? "1" : "0"),
-        () => updateColormap(currentDevice, colorMap),
-        () => updatePalette(currentDevice, palette),
-      ]);
+      await recoverySave(
+        currentDevice,
+        neuronID,
+        [
+          () => currentDevice.noCacheCommand("keymap.custom", serializeKeymap(keymap.custom)),
+          () => currentDevice.noCacheCommand("keymap.onlyCustom", keymap.onlyCustom ? "1" : "0"),
+          () => updateColormap(currentDevice, colorMap),
+          () => updatePalette(currentDevice, palette),
+        ],
+        assertUnchanged,
+      );
       setCurrentLayer(currentLayer);
       setCurrentKeyIndex(currentKeyIndex);
       setCurrentLedIndex(currentLedIndex);
@@ -962,6 +941,12 @@ const LayoutEditor = (props: LayoutEditorProps) => {
       setIsMultiSelected(false);
       setSelectedPaletteColor(null);
       setIsColorButtonSelected(false);
+      const neurons = store.get("neurons") as Neuron[];
+      const neuronIndex = neurons.findIndex(neuron => neuron.id === neuronID);
+      if (neuronIndex >= 0) {
+        neurons[neuronIndex].layers = layerNames;
+        store.set("neurons", neurons);
+      }
       const commands = await Backup.Commands(currentDevice);
       const backup = await bkp.DoBackup(commands, neuronID, currentDevice);
       Backup.SaveBackup(backup, currentDevice);
@@ -1707,10 +1692,28 @@ const LayoutEditor = (props: LayoutEditorProps) => {
   }
 
   // log.info("execution that may not render");
+  const mcpCatalog = catalogFor(state.currentDevice, keymapDB);
   const mcp = useLiveEditor({
+    importBackup: (backup, draft) => importBackup(state.currentDevice, backup, draft),
+    catalog: mcpCatalog,
     ready: scanned.current && keymap.custom.length > 0,
     saving: isSaving,
     draft: {
+      leds: {
+        left: state.currentDevice?.device?.keyboard?.ledsLeft || [],
+        right: state.currentDevice?.device?.keyboard?.ledsRight || [],
+        underglowLeft: state.currentDevice?.device?.keyboardUnderglow?.ledsLeft || [],
+        underglowRight: state.currentDevice?.device?.keyboardUnderglow?.ledsRight || [],
+      },
+      firmware: state.currentDevice?.memoryMap.get("version"),
+      editor: "layout",
+      commands: commandsFor(state.currentDevice),
+      macros,
+      superkeys,
+      defaultKeys: keymap.default.map(row => row.map(key => key.keyCode)),
+      layerNames: keymap.custom.map(
+        (_, index) => layerNames[index + (keymap.onlyCustom ? 0 : keymap.default.length)]?.name || `L${index + 1}`,
+      ),
       deviceId: neuronID,
       deviceName,
       virtual: state.currentDevice?.type === "virtual",
@@ -1731,6 +1734,16 @@ const LayoutEditor = (props: LayoutEditorProps) => {
         onlyCustom: draft.onlyCustom,
         custom: draft.keys.map(row => row.map(code => keymapDB.parse(code))),
       });
+      if (draft.layerNames)
+        setLayerNames(
+          layerNames.map((entry, index) => ({
+            ...entry,
+            name: draft.layerNames[index - (keymap.onlyCustom ? 0 : keymap.default.length)] ?? entry.name,
+          })),
+        );
+      setCurrentLayer(draft.selectedLayer);
+      setCurrentKeyIndex(draft.selectedKey);
+      setCurrentLedIndex(draft.selectedLed);
       setPalette(draft.palette.map(color => ({ ...color, rgb: `rgb(${color.r}, ${color.g}, ${color.b})` })));
       setColorMap(draft.colors.map(row => row.slice()));
       setModified(draft.dirty);
@@ -1773,7 +1786,6 @@ const LayoutEditor = (props: LayoutEditorProps) => {
 
   return (
     <Styles className="layoutEditor h-full">
-      <McpControl />
       <motion.div
         className={`keyboard-editor h-[inherit] px-3 ${modeselect} ${modeselect === "color" ? "[&_.raiseKeyboard]:h-auto" : ""} singleViewMode ${
           typeof selectedPaletteColor === "number" ? "colorSelected" : ""

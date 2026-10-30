@@ -1,0 +1,1039 @@
+{
+  "devices": {
+    "type": "object",
+    "properties": {},
+    "additionalProperties": false,
+    "$schema": "http://json-schema.org/draft-07/schema#"
+  },
+  "telemetry": {
+    "type": "object",
+    "properties": {},
+    "additionalProperties": false,
+    "$schema": "http://json-schema.org/draft-07/schema#"
+  },
+  "app_settings": {
+    "type": "object",
+    "properties": {},
+    "additionalProperties": false,
+    "$schema": "http://json-schema.org/draft-07/schema#"
+  },
+  "app_setting": {
+    "type": "object",
+    "properties": {
+      "name": {
+        "type": "string",
+        "enum": [
+          "theme",
+          "deviceNickname",
+          "language",
+          "verbose",
+          "showDefaults",
+          "runInBackground",
+          "lens.enabled",
+          "lens.opacity",
+          "lens.showUnderglow",
+          "lens.overlayMode",
+          "lens.overlayAutoShow",
+          "lens.overlayAutoShowDuration",
+          "lens.resizeMode"
+        ]
+      },
+      "value": {
+        "anyOf": [
+          {
+            "type": "string",
+            "maxLength": 128
+          },
+          {
+            "type": "boolean"
+          },
+          {
+            "type": "number"
+          }
+        ]
+      }
+    },
+    "required": ["name", "value"],
+    "additionalProperties": false,
+    "$schema": "http://json-schema.org/draft-07/schema#"
+  },
+  "backup_convert": {
+    "type": "object",
+    "properties": {
+      "backup": {
+        "type": "object",
+        "properties": {
+          "neuron": {
+            "type": "object",
+            "properties": {
+              "device": {
+                "type": "object",
+                "properties": {
+                  "info": {
+                    "type": "object",
+                    "properties": {
+                      "product": {
+                        "type": "string"
+                      },
+                      "keyboardType": {
+                        "type": "string"
+                      }
+                    },
+                    "required": ["product", "keyboardType"],
+                    "additionalProperties": true
+                  }
+                },
+                "required": ["info"],
+                "additionalProperties": true
+              },
+              "layers": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "name": {
+                      "type": "string",
+                      "maxLength": 128
+                    },
+                    "id": {
+                      "type": "number"
+                    }
+                  },
+                  "required": ["name", "id"],
+                  "additionalProperties": false
+                }
+              },
+              "macros": {
+                "type": "array",
+                "items": {}
+              },
+              "superkeys": {
+                "type": "array",
+                "items": {}
+              }
+            },
+            "required": ["device"],
+            "additionalProperties": true
+          },
+          "backup": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "command": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128
+                },
+                "data": {
+                  "type": "string",
+                  "maxLength": 262144
+                }
+              },
+              "required": ["command", "data"],
+              "additionalProperties": false
+            },
+            "maxItems": 256
+          }
+        },
+        "required": ["neuron", "backup"],
+        "additionalProperties": true
+      },
+      "includePrivate": {
+        "type": "boolean",
+        "const": true
+      }
+    },
+    "required": ["backup", "includePrivate"],
+    "additionalProperties": false,
+    "$schema": "http://json-schema.org/draft-07/schema#"
+  },
+  "backup_compare": {
+    "type": "object",
+    "properties": {
+      "expectedRevision": {
+        "type": "string"
+      },
+      "backup": {
+        "type": "object",
+        "properties": {
+          "neuron": {
+            "type": "object",
+            "properties": {
+              "device": {
+                "type": "object",
+                "properties": {
+                  "info": {
+                    "type": "object",
+                    "properties": {
+                      "product": {
+                        "type": "string"
+                      },
+                      "keyboardType": {
+                        "type": "string"
+                      }
+                    },
+                    "required": ["product", "keyboardType"],
+                    "additionalProperties": true
+                  }
+                },
+                "required": ["info"],
+                "additionalProperties": true
+              },
+              "layers": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "name": {
+                      "type": "string",
+                      "maxLength": 128
+                    },
+                    "id": {
+                      "type": "number"
+                    }
+                  },
+                  "required": ["name", "id"],
+                  "additionalProperties": false
+                }
+              },
+              "macros": {
+                "type": "array",
+                "items": {}
+              },
+              "superkeys": {
+                "type": "array",
+                "items": {}
+              }
+            },
+            "required": ["device"],
+            "additionalProperties": true
+          },
+          "backup": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "command": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128
+                },
+                "data": {
+                  "type": "string",
+                  "maxLength": 262144
+                }
+              },
+              "required": ["command", "data"],
+              "additionalProperties": false
+            },
+            "maxItems": 256
+          }
+        },
+        "required": ["neuron", "backup"],
+        "additionalProperties": true
+      }
+    },
+    "required": ["expectedRevision", "backup"],
+    "additionalProperties": false,
+    "$schema": "http://json-schema.org/draft-07/schema#"
+  },
+  "restore_backup": {
+    "type": "object",
+    "properties": {
+      "expectedRevision": {
+        "type": "string"
+      },
+      "deviceId": {
+        "type": "string",
+        "minLength": 1
+      },
+      "confirm": {
+        "type": "boolean",
+        "const": true
+      },
+      "backup": {
+        "type": "object",
+        "properties": {
+          "neuron": {
+            "type": "object",
+            "properties": {
+              "device": {
+                "type": "object",
+                "properties": {
+                  "info": {
+                    "type": "object",
+                    "properties": {
+                      "product": {
+                        "type": "string"
+                      },
+                      "keyboardType": {
+                        "type": "string"
+                      }
+                    },
+                    "required": ["product", "keyboardType"],
+                    "additionalProperties": true
+                  }
+                },
+                "required": ["info"],
+                "additionalProperties": true
+              },
+              "layers": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "name": {
+                      "type": "string",
+                      "maxLength": 128
+                    },
+                    "id": {
+                      "type": "number"
+                    }
+                  },
+                  "required": ["name", "id"],
+                  "additionalProperties": false
+                }
+              },
+              "macros": {
+                "type": "array",
+                "items": {}
+              },
+              "superkeys": {
+                "type": "array",
+                "items": {}
+              }
+            },
+            "required": ["device"],
+            "additionalProperties": true
+          },
+          "backup": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "command": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128
+                },
+                "data": {
+                  "type": "string",
+                  "maxLength": 262144
+                }
+              },
+              "required": ["command", "data"],
+              "additionalProperties": false
+            },
+            "maxItems": 256
+          }
+        },
+        "required": ["neuron", "backup"],
+        "additionalProperties": true
+      }
+    },
+    "required": ["expectedRevision", "deviceId", "confirm", "backup"],
+    "additionalProperties": false,
+    "$schema": "http://json-schema.org/draft-07/schema#"
+  },
+  "backup_read": {
+    "type": "object",
+    "properties": {
+      "includePrivate": {
+        "type": "boolean"
+      }
+    },
+    "additionalProperties": false,
+    "$schema": "http://json-schema.org/draft-07/schema#"
+  },
+  "backup_store": {
+    "type": "object",
+    "properties": {
+      "confirm": {
+        "type": "boolean",
+        "const": true
+      }
+    },
+    "required": ["confirm"],
+    "additionalProperties": false,
+    "$schema": "http://json-schema.org/draft-07/schema#"
+  },
+  "backup_import": {
+    "type": "object",
+    "properties": {
+      "expectedRevision": {
+        "type": "string"
+      },
+      "backup": {
+        "type": "object",
+        "properties": {
+          "neuron": {
+            "type": "object",
+            "properties": {
+              "device": {
+                "type": "object",
+                "properties": {
+                  "info": {
+                    "type": "object",
+                    "properties": {
+                      "product": {
+                        "type": "string"
+                      },
+                      "keyboardType": {
+                        "type": "string"
+                      }
+                    },
+                    "required": ["product", "keyboardType"],
+                    "additionalProperties": true
+                  }
+                },
+                "required": ["info"],
+                "additionalProperties": true
+              },
+              "layers": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "name": {
+                      "type": "string",
+                      "maxLength": 128
+                    },
+                    "id": {
+                      "type": "number"
+                    }
+                  },
+                  "required": ["name", "id"],
+                  "additionalProperties": false
+                }
+              },
+              "macros": {
+                "type": "array",
+                "items": {}
+              },
+              "superkeys": {
+                "type": "array",
+                "items": {}
+              }
+            },
+            "required": ["device"],
+            "additionalProperties": true
+          },
+          "backup": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "command": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128
+                },
+                "data": {
+                  "type": "string",
+                  "maxLength": 262144
+                }
+              },
+              "required": ["command", "data"],
+              "additionalProperties": false
+            },
+            "maxItems": 256
+          }
+        },
+        "required": ["neuron", "backup"],
+        "additionalProperties": true
+      }
+    },
+    "required": ["expectedRevision", "backup"],
+    "additionalProperties": false,
+    "$schema": "http://json-schema.org/draft-07/schema#"
+  },
+  "connect": {
+    "type": "object",
+    "properties": {
+      "deviceId": {
+        "type": "string",
+        "minLength": 1
+      },
+      "confirm": {
+        "type": "boolean",
+        "const": true
+      }
+    },
+    "required": ["deviceId", "confirm"],
+    "additionalProperties": false,
+    "$schema": "http://json-schema.org/draft-07/schema#"
+  },
+  "disconnect": {
+    "type": "object",
+    "properties": {
+      "confirm": {
+        "type": "boolean",
+        "const": true
+      }
+    },
+    "required": ["confirm"],
+    "additionalProperties": false,
+    "$schema": "http://json-schema.org/draft-07/schema#"
+  },
+  "read": {
+    "type": "object",
+    "properties": {
+      "includePrivate": {
+        "type": "boolean"
+      }
+    },
+    "additionalProperties": false,
+    "$schema": "http://json-schema.org/draft-07/schema#"
+  },
+  "export": {
+    "type": "object",
+    "properties": {
+      "includePrivate": {
+        "type": "boolean"
+      }
+    },
+    "additionalProperties": false,
+    "$schema": "http://json-schema.org/draft-07/schema#"
+  },
+  "batch": {
+    "type": "object",
+    "properties": {
+      "expectedRevision": {
+        "type": "string"
+      },
+      "edits": {
+        "type": "array",
+        "items": {
+          "anyOf": [
+            {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "type": "string",
+                  "const": "key"
+                },
+                "layer": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "key": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "keyCode": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 65535
+                }
+              },
+              "required": ["kind", "layer", "key", "keyCode"],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "type": "string",
+                  "const": "color"
+                },
+                "layer": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "led": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "palette": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              },
+              "required": ["kind", "layer", "led", "palette"],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "type": "string",
+                  "const": "color_side"
+                },
+                "layer": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "side": {
+                  "type": "string",
+                  "enum": ["left", "right", "both"]
+                },
+                "area": {
+                  "type": "string",
+                  "enum": ["keys", "underglow", "all"]
+                },
+                "palette": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              },
+              "required": ["kind", "layer", "side", "area", "palette"],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "type": "string",
+                  "const": "action"
+                },
+                "layer": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "key": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "actionId": {
+                  "type": "string",
+                  "pattern": "^keycode:\\d+$"
+                }
+              },
+              "required": ["kind", "layer", "key", "actionId"],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "type": "string",
+                  "const": "palette"
+                },
+                "slot": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "color": {
+                  "type": "object",
+                  "properties": {
+                    "r": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 255
+                    },
+                    "g": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 255
+                    },
+                    "b": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 255
+                    }
+                  },
+                  "required": ["r", "g", "b"],
+                  "additionalProperties": false
+                }
+              },
+              "required": ["kind", "slot", "color"],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "type": "string",
+                  "const": "color_bulk"
+                },
+                "layer": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "leds": {
+                  "type": "array",
+                  "items": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "minItems": 1,
+                  "maxItems": 1024
+                },
+                "palette": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              },
+              "required": ["kind", "layer", "leds", "palette"],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "type": "string",
+                  "const": "layer_name"
+                },
+                "layer": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "name": {
+                  "type": "string",
+                  "maxLength": 128
+                }
+              },
+              "required": ["kind", "layer", "name"],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "type": "string",
+                  "const": "layer_copy"
+                },
+                "from": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "to": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "colors": {
+                  "type": "boolean"
+                }
+              },
+              "required": ["kind", "from", "to"],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "type": "string",
+                  "const": "layer_reset"
+                },
+                "layer": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "source": {
+                  "type": "string",
+                  "enum": ["transparent", "disabled", "firmware_default"]
+                },
+                "defaultLayer": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              },
+              "required": ["kind", "layer", "source"],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "type": "string",
+                  "const": "macro_put"
+                },
+                "index": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "name": {
+                  "type": "string",
+                  "maxLength": 128
+                },
+                "actions": {
+                  "type": "array",
+                  "items": {
+                    "anyOf": [
+                      {
+                        "type": "object",
+                        "properties": {
+                          "type": {
+                            "type": "number",
+                            "const": 1
+                          },
+                          "keyCode": {
+                            "type": "array",
+                            "minItems": 2,
+                            "maxItems": 2,
+                            "items": [
+                              {
+                                "type": "integer",
+                                "minimum": 0,
+                                "maximum": 65535
+                              },
+                              {
+                                "type": "integer",
+                                "minimum": 0,
+                                "maximum": 65535
+                              }
+                            ]
+                          }
+                        },
+                        "required": ["type", "keyCode"],
+                        "additionalProperties": false
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "type": {
+                            "type": "number",
+                            "enum": [2, 3, 4, 5]
+                          },
+                          "keyCode": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 65535
+                          }
+                        },
+                        "required": ["type", "keyCode"],
+                        "additionalProperties": false
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "type": {
+                            "type": "number",
+                            "enum": [6, 7, 8]
+                          },
+                          "keyCode": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 255
+                          }
+                        },
+                        "required": ["type", "keyCode"],
+                        "additionalProperties": false
+                      }
+                    ]
+                  },
+                  "maxItems": 4096
+                }
+              },
+              "required": ["kind", "index", "name", "actions"],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "type": "string",
+                  "const": "macro_delete"
+                },
+                "index": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              },
+              "required": ["kind", "index"],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "type": "string",
+                  "const": "superkey_put"
+                },
+                "index": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "name": {
+                  "type": "string",
+                  "maxLength": 128
+                },
+                "actions": {
+                  "type": "array",
+                  "items": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 65535
+                  },
+                  "minItems": 5,
+                  "maxItems": 5
+                }
+              },
+              "required": ["kind", "index", "name", "actions"],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "type": "string",
+                  "const": "superkey_delete"
+                },
+                "index": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              },
+              "required": ["kind", "index"],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "type": "string",
+                  "const": "setting"
+                },
+                "name": {
+                  "type": "string",
+                  "maxLength": 100
+                },
+                "value": {
+                  "anyOf": [
+                    {
+                      "type": "number"
+                    },
+                    {
+                      "type": "boolean"
+                    },
+                    {
+                      "type": "string",
+                      "maxLength": 128
+                    }
+                  ]
+                }
+              },
+              "required": ["kind", "name", "value"],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "type": "string",
+                  "const": "selection"
+                },
+                "layer": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "key": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "led": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              },
+              "required": ["kind", "layer"],
+              "additionalProperties": false
+            }
+          ]
+        },
+        "minItems": 1,
+        "maxItems": 256
+      }
+    },
+    "required": ["expectedRevision", "edits"],
+    "additionalProperties": false,
+    "$schema": "http://json-schema.org/draft-07/schema#"
+  },
+  "catalog": {
+    "type": "object",
+    "properties": {
+      "cursor": {
+        "type": "integer",
+        "minimum": 0
+      },
+      "limit": {
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 250
+      },
+      "query": {
+        "type": "string",
+        "maxLength": 100
+      }
+    },
+    "additionalProperties": false,
+    "$schema": "http://json-schema.org/draft-07/schema#"
+  },
+  "decode": {
+    "type": "object",
+    "properties": {
+      "codes": {
+        "type": "array",
+        "items": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 65535
+        },
+        "maxItems": 256
+      }
+    },
+    "required": ["codes"],
+    "additionalProperties": false,
+    "$schema": "http://json-schema.org/draft-07/schema#"
+  },
+  "diff": {
+    "type": "object",
+    "properties": {
+      "includePrivate": {
+        "type": "boolean"
+      }
+    },
+    "additionalProperties": false,
+    "$schema": "http://json-schema.org/draft-07/schema#"
+  },
+  "discard": {
+    "type": "object",
+    "properties": {
+      "expectedRevision": {
+        "type": "string"
+      }
+    },
+    "required": ["expectedRevision"],
+    "additionalProperties": false,
+    "$schema": "http://json-schema.org/draft-07/schema#"
+  },
+  "navigate": {
+    "type": "object",
+    "properties": {
+      "editor": {
+        "type": "string",
+        "enum": ["layout", "macros", "superkeys", "preferences", "devices"]
+      }
+    },
+    "required": ["editor"],
+    "additionalProperties": false,
+    "$schema": "http://json-schema.org/draft-07/schema#"
+  },
+  "undo": {
+    "type": "object",
+    "properties": {
+      "expectedRevision": {
+        "type": "string"
+      }
+    },
+    "required": ["expectedRevision"],
+    "additionalProperties": false,
+    "$schema": "http://json-schema.org/draft-07/schema#"
+  },
+  "save": {
+    "type": "object",
+    "properties": {
+      "expectedRevision": {
+        "type": "string"
+      },
+      "confirm": {
+        "type": "boolean",
+        "const": true
+      }
+    },
+    "required": ["expectedRevision", "confirm"],
+    "additionalProperties": false,
+    "$schema": "http://json-schema.org/draft-07/schema#"
+  }
+}

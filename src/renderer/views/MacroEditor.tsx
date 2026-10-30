@@ -41,7 +41,12 @@ import { MacroActionsType, MacrosType } from "@Renderer/types/macros";
 // Components
 import LogoLoader from "@Renderer/components/atoms/loader/LogoLoader";
 import { Button } from "@Renderer/components/atoms/Button";
-import { IconArrowDownWithLine, IconArrowUpWithLine, IconFloppyDisk, IconLoader } from "@Renderer/components/atoms/icons";
+import {
+  IconArrowDownWithLine,
+  IconArrowUpWithLine,
+  IconFloppyDisk,
+  IconLoader,
+} from "@Renderer/components/atoms/icons";
 import MacroSelector from "@Renderer/components/organisms/Select/MacroSelector";
 import ToastMessage from "@Renderer/components/atoms/ToastMessage";
 import Callout from "@Renderer/components/molecules/Callout/Callout";
@@ -68,6 +73,10 @@ import {
   serializeMacros,
   serializeSuperkeys,
 } from "../../api/parsers";
+
+import { importBackup } from "../../mcp/backups";
+import { useLiveEditor } from "../../mcp/useLiveEditor";
+import { baseDraft, catalogFor, recoverySave } from "../../mcp/deviceDraft";
 
 const store = Store.getStore();
 
@@ -116,6 +125,7 @@ function MacroEditor(props: MacroEditorProps) {
   let keymapDB = new KeymapDB();
   const bkp = new Backup();
   const [isSaving, setIsSaving] = useState(false);
+  const saveLock = useRef(false);
 
   const initialState: MacroEditorInitialStateType = {
     keymap: undefined,
@@ -227,43 +237,43 @@ function MacroEditor(props: MacroEditorProps) {
     changeSelected(aux.id);
   };
 
-  const writeMacros = async () => {
-    const { macros, neurons, neuronID, keymap, superkeys } = state;
-    const { setLoading, cancelContext } = props;
+  const writeMacros = async (assertUnchanged: () => void = () => {}) => {
+    if (saveLock.current) return { success: false, error: "Save already in progress" };
+    saveLock.current = true;
     const { currentDevice } = deviceState;
     setIsSaving(true);
-    setLoading(true);
-    log.info("saving Macros:", macros, keymap, superkeys);
-    const newMacros = macros;
-    const localNeurons = [...neurons];
-    localNeurons[localNeurons.findIndex(n => n.id === neuronID)].macros = newMacros;
-    store.set("neurons", localNeurons);
+    props.setLoading(true);
     try {
-      await currentDevice.command("macros.map", serializeMacros(newMacros, state.totalMemory));
-      log.info(keymap.custom);
-      await currentDevice.command("keymap.custom", serializeKeymap(keymap.custom));
-      await currentDevice.command("superkeys.map", serializeSuperkeys(superkeys));
-      const commands = await Backup.Commands(currentDevice);
-      const backup = await bkp.DoBackup(commands, neurons[neurons.findIndex(n => n.id === neuronID)].id, currentDevice);
+      await recoverySave(
+        currentDevice,
+        state.neuronID,
+        [
+          () => currentDevice.noCacheCommand("macros.map", serializeMacros(state.macros, state.totalMemory)),
+          () => currentDevice.noCacheCommand("keymap.custom", serializeKeymap(state.keymap.custom)),
+          () => currentDevice.noCacheCommand("superkeys.map", serializeSuperkeys(state.superkeys)),
+        ],
+        assertUnchanged,
+      );
+      const neurons = store.get("neurons") as typeof state.neurons;
+      const index = neurons.findIndex(neuron => neuron.id === state.neuronID);
+      if (index >= 0) {
+        neurons[index].macros = state.macros;
+        neurons[index].superkeys = state.superkeys;
+        store.set("neurons", neurons);
+      }
+      const backup = await bkp.DoBackup(await Backup.Commands(currentDevice), state.neuronID, currentDevice);
       Backup.SaveBackup(backup, currentDevice);
-      toast.success(<ToastMessage title={i18n.editor.macros.successFlashTitle} content="" icon={<IconFloppyDisk />} />, {
-        autoClose: 2000,
-        icon: "",
-      });
-      state.modified = false;
-      state.macros = newMacros;
-      state.storedMacros = newMacros;
-      setState({ ...state });
-      cancelContext();
-      setLoading(false);
-      setIsSaving(false);
+      setState({ ...state, modified: false, storedMacros: state.macros, storedSuper: state.superkeys });
+      props.cancelContext();
+      return { success: true };
     } catch (error) {
-      log.info("error when writing macros");
-      log.error(error);
-      toast.error(<ToastMessage title="Error when sending macros to the device" icon={<IconFloppyDisk />} />, { icon: "" });
-      cancelContext();
-      setLoading(false);
+      setState({ ...state, modified: true });
+      toast.error(String(error));
+      return { success: false, error: String(error) };
+    } finally {
+      saveLock.current = false;
       setIsSaving(false);
+      props.setLoading(false);
     }
   };
 
@@ -292,7 +302,8 @@ function MacroEditor(props: MacroEditorProps) {
     }
     for (let i = 0; i < listToDeleteS.length; i += 1) {
       if (listToDeleteS[i].newKey === -1) {
-        superkeys[listToDeleteS[i].superIdx].actions[listToDeleteS[i].pos] = selectedList === -1 ? 1 : selectedList + 53852;
+        superkeys[listToDeleteS[i].superIdx].actions[listToDeleteS[i].pos] =
+          selectedList === -1 ? 1 : selectedList + 53852;
       } else {
         superkeys[listToDeleteS[i].superIdx].actions[listToDeleteS[i].pos] = listToDeleteS[i].newKey + 53852;
       }
@@ -344,14 +355,18 @@ function MacroEditor(props: MacroEditorProps) {
       const filteredKeys = keymap.custom
         ? keymap.custom
             .map((layer, layerIdx) =>
-              layer.map((key, pos) => ({ layer: layerIdx, key, pos, newKey })).filter(elem => elem.key.keyCode === macroID),
+              layer
+                .map((key, pos) => ({ layer: layerIdx, key, pos, newKey }))
+                .filter(elem => elem.key.keyCode === macroID),
             )
             .flat()
         : [];
       const superkeyList = superkeys
         ? superkeys
             .map((supers, superIdx) =>
-              supers.actions.map((action, pos) => ({ superIdx, pos, newKey, action })).filter(elem => elem.action === macroID),
+              supers.actions
+                .map((action, pos) => ({ superIdx, pos, newKey, action }))
+                .filter(elem => elem.action === macroID),
             )
             .flat()
         : [];
@@ -374,7 +389,9 @@ function MacroEditor(props: MacroEditorProps) {
     state.listToDeleteS = customSuperList;
     state.listToDeleteM = customMacrosList;
     state.showDeleteModal =
-      customKeymapList.filter(c => c.newKey === -1).length > 0 || customSuperList.length > 0 || customMacrosList.length > 0;
+      customKeymapList.filter(c => c.newKey === -1).length > 0 ||
+      customSuperList.length > 0 ||
+      customMacrosList.length > 0;
     setState({ ...state });
 
     if (!state.showDeleteModal) ActUponDelete(state);
@@ -456,12 +473,8 @@ function MacroEditor(props: MacroEditorProps) {
       }
       let tMem = 0;
       const aux = await currentDevice.command("macros.memory");
-      if (typeof aux === "string") {
-        tMem = 2048;
-      } else {
-        tMem = parseInt(aux, 10);
-      }
-      if (tMem === undefined || tMem < 100) tMem = 2048;
+      tMem = typeof aux === "string" ? Number(aux.trim().split(/\s+/)[0]) : Number(aux);
+      if (!Number.isInteger(tMem) || tMem < 1) throw new Error("Device did not report a valid macro memory capacity");
       const defaults = await currentDevice.command("keymap.default");
       const custom = await currentDevice.command("keymap.custom");
       const onlyCustom = Boolean(parseInt(await currentDevice.command("keymap.onlyCustom"), 10));
@@ -489,7 +502,9 @@ function MacroEditor(props: MacroEditorProps) {
     } catch (error) {
       log.info("error when loading macros");
       log.error(error);
-      toast.error(<ToastMessage title="Error when loading macros from the device" icon={<IconLoader />} />, { icon: "" });
+      toast.error(<ToastMessage title="Error when loading macros from the device" icon={<IconLoader />} />, {
+        icon: "",
+      });
       cancelContext();
       setLoading(false);
       onDisconnect();
@@ -683,7 +698,10 @@ function MacroEditor(props: MacroEditorProps) {
     listToDeleteM.map(({ macroIdx, pos, newKey }) => {
       if (newKey === -1) {
         return (
-          <li key={`${macroIdx}-${pos}-${newKey}`} className="text-left">{`Key in Macro ${macroIdx + 1} and action ${pos}`}</li>
+          <li
+            key={`${macroIdx}-${pos}-${newKey}`}
+            className="text-left"
+          >{`Key in Macro ${macroIdx + 1} and action ${pos}`}</li>
         );
       }
       return "";
@@ -710,6 +728,49 @@ function MacroEditor(props: MacroEditorProps) {
     </>
   );
 
+  const mcpCatalog = catalogFor(deviceState.currentDevice, keymapDB);
+  useLiveEditor({
+    importBackup: (backup, draft) => importBackup(deviceState.currentDevice, backup, draft),
+    ready: !loading && !!state.keymap,
+    saving: isSaving,
+    catalog: mcpCatalog,
+    validate: draft => {
+      if (serializeMacros(draft.macros, state.totalMemory).trim().split(/\s+/).length > state.totalMemory)
+        throw new Error("Serialized macros exceed device memory");
+    },
+    draft: {
+      ...baseDraft(deviceState.currentDevice, state.neuronID, "macros"),
+      keys: state.keymap?.custom.map(row => row.map(key => key.keyCode)) || [],
+      defaultKeys: state.keymap?.default.map(row => row.map(key => key.keyCode)) || [],
+      onlyCustom: state.keymap?.onlyCustom ?? true,
+      defaultLayerCount: state.keymap?.default.length || 0,
+      dirty: state.modified,
+      selectedDefinition: state.selectedMacro,
+      macros: state.macros,
+      superkeys: state.superkeys,
+      limits: {
+        macros: 128,
+        superkeys: 70,
+        macroActions: deviceState.currentDevice?.device?.info?.product === "Raise" ? 4096 : 100,
+        macroBytes: state.totalMemory,
+      },
+    },
+    apply: draft => {
+      setState({
+        ...state,
+        keymap: { ...state.keymap, custom: draft.keys.map(row => row.map(code => keymapDB.parse(code))) },
+        macros: draft.macros,
+        superkeys: draft.superkeys,
+        selectedMacro: Math.max(0, Math.min(state.selectedMacro, (draft.macros?.length || 1) - 1)),
+        modified: draft.dirty,
+        usedMemory: draft.macros.map(macro => macro.actions).flat().length,
+      });
+      if (draft.dirty) props.startContext();
+      else props.cancelContext();
+    },
+    save: writeMacros,
+  });
+
   if (loading) return <LogoLoader centered />;
   return (
     <Styles className="macroEditor">
@@ -734,7 +795,9 @@ function MacroEditor(props: MacroEditorProps) {
           }
           showSaving
           isSaving={isSaving}
-          saveContext={writeMacros}
+          saveContext={async () => {
+            await writeMacros();
+          }}
           destroyContext={destroyThisContext}
           inContext={modified}
           saveButtonRef={saveButtonRef}
@@ -782,7 +845,9 @@ function MacroEditor(props: MacroEditorProps) {
                   The macro you want to delete is currently in use on:
                 </Heading>
                 <div className="mt-1 mb-4">
-                  <ul className="mb-[4px] text-ssm list-disc pl-[24px] text-gray-500 dark:text-gray-100">{ListOfDeletes}</ul>
+                  <ul className="mb-[4px] text-ssm list-disc pl-[24px] text-gray-500 dark:text-gray-100">
+                    {ListOfDeletes}
+                  </ul>
                 </div>
               </>
             )}
