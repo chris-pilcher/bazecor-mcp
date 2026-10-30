@@ -15,7 +15,7 @@ copyright notices and the GPL-3.0-only license remain in effect.
 
 ## Download and run on Linux
 
-Download the `.AppImage` and `SHA256SUMS` from this fork's
+Download the `.AppImage`, `Bazecor-MCP-companion.tar.gz`, and `SHA256SUMS` from this fork's
 [Releases](https://github.com/chris-pilcher/bazecor-mcp/releases). A release appears
 there after a successful tagged build. Then, in the download directory:
 

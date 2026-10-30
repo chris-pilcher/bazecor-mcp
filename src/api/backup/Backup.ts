@@ -181,12 +181,6 @@ export default class Backup {
       const json = JSON.stringify(localBackup, null, 2);
       log.info(fullPath, folderPath, localBackup);
       log.info("Creating folders");
-      fs.mkdir(folderPath, { recursive: true }, err => {
-        if (err) {
-          log.error(err);
-          throw err;
-        }
-      });
       log.info(`Saving Backup to -> ${fullPath}`);
       try {
         if (!fs.existsSync(path.parse(fullPath).dir)) {
