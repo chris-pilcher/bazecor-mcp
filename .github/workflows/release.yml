@@ -14,7 +14,7 @@ permissions:
 jobs:
   testing:
     # Upstream automation needs upstream signing credentials.
-    if: github.repository == \'Dygmalab/Bazecor\'
+    if: github.repository == 'Dygmalab/Bazecor'
     runs-on: ${{ matrix.os }}
     permissions:
       contents: write # to be able to publish a GitHub release
@@ -56,7 +56,7 @@ jobs:
 
   build:
     # Upstream automation needs upstream signing credentials.
-    if: github.repository == \'Dygmalab/Bazecor\'
+    if: github.repository == 'Dygmalab/Bazecor'
     runs-on: ${{ matrix.os }}
     needs: [testing]
     permissions:
@@ -222,7 +222,7 @@ jobs:
           ls -R windows_signing
   release:
     # Upstream automation needs upstream signing credentials.
-    if: github.repository == \'Dygmalab/Bazecor\'
+    if: github.repository == 'Dygmalab/Bazecor'
     # here we only download the previous artifacts and upload them with release name, just for clarification
     needs: [build]
     runs-on: ubuntu-22.04

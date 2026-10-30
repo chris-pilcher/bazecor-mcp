@@ -15,7 +15,7 @@ on:
 jobs:
   testing:
     # Upstream automation needs upstream signing credentials.
-    if: github.repository == \'Dygmalab/Bazecor\'
+    if: github.repository == 'Dygmalab/Bazecor'
     runs-on: ${{ matrix.os }}
 
     strategy:

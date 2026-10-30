@@ -16,7 +16,7 @@ permissions:
 jobs:
   testing:
     # Upstream automation needs upstream signing credentials.
-    if: github.repository == \'Dygmalab/Bazecor\'
+    if: github.repository == 'Dygmalab/Bazecor'
     runs-on: ${{ matrix.os }}
     permissions:
       contents: write # to be able to publish a GitHub release
@@ -58,7 +58,7 @@ jobs:
 
   build:
     # Upstream automation needs upstream signing credentials.
-    if: github.repository == \'Dygmalab/Bazecor\'
+    if: github.repository == 'Dygmalab/Bazecor'
     name: Bazecor ${{ matrix.target_os }}_${{ matrix.target_arch }} binaries
     strategy:
       fail-fast: false
