@@ -145,7 +145,7 @@ export default class Backup {
    * @param {*} localBackup The backup data object to be stored locally
    * @returns True when the function has successfully stored the backup locally, and false if something fails, an error log will be also pushed to the console
    */
-  static SaveBackup(backup: BackupType, device: Device) {
+  static SaveBackup(backup: BackupType, device: Device, recovery = false) {
     const localBackup = { ...backup };
     if (device.file !== false) {
       const file = JSON.parse(fs.readFileSync(device.fileData.device.filePath).toString("utf-8"));
@@ -176,7 +176,7 @@ export default class Backup {
           `0${d.getHours()}`.slice(-2) +
           `0${d.getMinutes()}`.slice(-2) +
           `0${d.getSeconds()}`.slice(-2)
-        }-${localBackup.neuron.name.replace(/[^\w\s]/gi, "")}.json`,
+        }-${localBackup.neuron.name.replace(/[^\w\s]/gi, "")}${recovery ? `-recovery-${Date.now()}` : ""}.json`,
       );
       const json = JSON.stringify(localBackup, null, 2);
       log.info(fullPath, folderPath, localBackup);
@@ -193,13 +193,18 @@ export default class Backup {
           fs.mkdirSync(path.parse(fullPath).dir, { recursive: true });
         }
         fs.writeFileSync(fullPath, json);
-        // Notify Layer Lens for every board it can visualize (Sonsei, Defy, …).
+        // Notify Layer Lens for every board it can visualize (Sonsei, Defy, ...).
         // Lens stores the ref per product and only displays it when that board is
         // the active (last-connected) device, so an idle Defy backup is harmless.
         // Unsupported products (e.g. Raise1) are still skipped.
         if (isSupportedLensProduct(product)) {
           log.info(`[Lens] backup saved for ${product} -> notifying Lens (neuronID: ${localBackup.neuronID})`);
-          ipcRenderer.send("lens:backup-saved", { backupFolder: folder, neuronID: localBackup.neuronID, product, keyboardType });
+          ipcRenderer.send("lens:backup-saved", {
+            backupFolder: folder,
+            neuronID: localBackup.neuronID,
+            product,
+            keyboardType,
+          });
         } else {
           log.info(`[Lens] backup saved for ${product} -> not a Lens-supported board, ignored`);
         }
@@ -226,7 +231,11 @@ export default class Backup {
       localNeurons[index].id = neuronID;
       store.set("neurons", localNeurons);
     }
-    log.info("Checking if statement:", device.device.info.product === "Raise2", backup.neuron.device.info.product === "Raise");
+    log.info(
+      "Checking if statement:",
+      device.device.info.product === "Raise2",
+      backup.neuron.device.info.product === "Raise",
+    );
     if (device.device.info.product === "Raise2" && backup.neuron.device.info.product === "Raise")
       data = Backup.convertRaiseToRaise2(backup, device);
     if (device.device.info.product === "Raise" && backup.neuron.device.info.product === "Raise2")
@@ -235,7 +244,9 @@ export default class Backup {
       data = Backup.convertDefyToSonsei(backup, device);
     // Reorder to ensure superkeys are restored before keymap
     try {
-      const keymapIdx = data.findIndex((c: BackupCmd) => typeof c.command === "string" && c.command === "keymap.custom");
+      const keymapIdx = data.findIndex(
+        (c: BackupCmd) => typeof c.command === "string" && c.command === "keymap.custom",
+      );
       if (keymapIdx > -1) {
         const toMoveIdxs: number[] = [];
         for (let i = keymapIdx + 1; i < data.length; i += 1) {
@@ -332,7 +343,8 @@ export default class Backup {
                       .join(" ");
                   }
                 } else if (command === "colormap.map") {
-                  const sourceLayerSize = virtual.device.keyboardUnderglow.rows * virtual.device.keyboardUnderglow.columns;
+                  const sourceLayerSize =
+                    virtual.device.keyboardUnderglow.rows * virtual.device.keyboardUnderglow.columns;
                   const colormap = parseColormapRaw(commandData, sourceLayerSize);
                   if (virtualProduct === "Raise" && deviceProduct === "Raise2") {
                     const colormapFinal = colormap.map((layer: number[]) =>
@@ -384,7 +396,8 @@ export default class Backup {
                     .map(k => k.toString())
                     .join(" ");
                 } else if (command === "colormap.map") {
-                  const colorLayerSize = virtual.device.keyboardUnderglow.rows * virtual.device.keyboardUnderglow.columns;
+                  const colorLayerSize =
+                    virtual.device.keyboardUnderglow.rows * virtual.device.keyboardUnderglow.columns;
                   const colormap = parseColormapRaw(commandData, colorLayerSize);
                   const colormapFinal = colormap.map((layer: number[]) => convertColormapDefyToSonsei(layer));
                   commandData = colormapFinal
@@ -436,7 +449,9 @@ export default class Backup {
         name,
         ctime: fs.statSync(name).ctime,
       }));
-      const newestFile = mappedFolder.sort((a: FolderMapType, b: FolderMapType) => b.ctime.getTime() - a.ctime.getTime());
+      const newestFile = mappedFolder.sort(
+        (a: FolderMapType, b: FolderMapType) => b.ctime.getTime() - a.ctime.getTime(),
+      );
 
       // Loading latest backup for the device
       const loadedFile = JSON.parse(fs.readFileSync(newestFile[0].name, "utf-8"));

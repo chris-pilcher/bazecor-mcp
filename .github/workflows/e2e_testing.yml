@@ -1,12 +1,19 @@
-name: E2E Tests (manual)
+name: E2E Tests
 on:
-  # Upstream flashing tests require hardware. Keep them available explicitly.
-  workflow_dispatch:
-permissions:
-  contents: read
-
+  push:
+    branches:
+      - "*"
+      - "!main"
+      - "!development"
+  pull_request:
+    branches:
+      - "*"
+      - "!main"
+      - "!development"
 jobs:
   e2e_test:
+    # Upstream automation needs upstream signing credentials.
+    if: github.repository == 'Dygmalab/Bazecor'
     timeout-minutes: 60
     runs-on: ${{ matrix.os }}
 
@@ -19,10 +26,10 @@ jobs:
           - os: ubuntu-22.04
 
     steps:
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v4
         with:
           python-version: "3.10"
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v3
       - uses: actions/setup-node@v4
         with:
           node-version: 22.14.0
@@ -35,7 +42,7 @@ jobs:
           bash build/validate-metainfo.sh
       - name: Cache node_modules
         id: cache-node-modules
-        uses: actions/cache@v4
+        uses: actions/cache@v3
         with:
           path: node_modules
           key: ${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('package.json', 'yarn.lock') }}
@@ -44,9 +51,9 @@ jobs:
         run: yarn install --frozen-lockfile --network-timeout 300000 # sometimes yarn takes time, therefore, we increase the timeout
       - name: Run Playwright tests
         run: yarn playwright test
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v3
         if: always()
         with:
-          name: playwright-report-${{ matrix.os }}
+          name: playwright-report
           path: playwright-report/
           retention-days: 30

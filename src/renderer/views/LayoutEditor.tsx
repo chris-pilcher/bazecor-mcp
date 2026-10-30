@@ -33,7 +33,14 @@ import { useDevice } from "@Renderer/DeviceContext";
 
 // Types
 import { LayerType, Neuron } from "@Renderer/types/neurons";
-import { ColormapType, KeymapType, KeyType, LayoutEditorProps, PaletteType, SegmentedKeyType } from "@Renderer/types/layout";
+import {
+  ColormapType,
+  KeymapType,
+  KeyType,
+  LayoutEditorProps,
+  PaletteType,
+  SegmentedKeyType,
+} from "@Renderer/types/layout";
 import { SuperkeysType } from "@Renderer/types/superkeys";
 import { MacrosType } from "@Renderer/types/macros";
 import { DeviceClass } from "@Renderer/types/devices";
@@ -68,6 +75,9 @@ import {
   parseSuperkeysRaw,
   serializeKeymap,
 } from "../../api/parsers";
+
+import { McpControl, useLiveEditor } from "../../mcp/useLiveEditor";
+import { saveWithRecovery } from "../../mcp/domain";
 
 const store = Store.getStore();
 
@@ -495,6 +505,7 @@ const LayoutEditor = (props: LayoutEditorProps) => {
 
   const scanned = useRef(false);
   const [isSaving, setIsSaving] = useState(false);
+  const saveLock = useRef(false);
   const { state } = useDevice();
   const [layerData, setLayerData] = useState<Array<KeyType>>([]);
   const [isReadOnly, setIsReadOnly] = useState(false);
@@ -537,8 +548,13 @@ const LayoutEditor = (props: LayoutEditorProps) => {
 
     // For underglow, prefer using ledsLeft/ledsRight arrays if available and not empty, otherwise fall back to rows * columns
     let underglowLEDs = 0;
-    if (currentDevice.device.keyboardUnderglow.ledsLeft?.length > 0 || currentDevice.device.keyboardUnderglow.ledsRight?.length > 0) {
-      underglowLEDs = (currentDevice.device.keyboardUnderglow.ledsLeft?.length || 0) + (currentDevice.device.keyboardUnderglow.ledsRight?.length || 0);
+    if (
+      currentDevice.device.keyboardUnderglow.ledsLeft?.length > 0 ||
+      currentDevice.device.keyboardUnderglow.ledsRight?.length > 0
+    ) {
+      underglowLEDs =
+        (currentDevice.device.keyboardUnderglow.ledsLeft?.length || 0) +
+        (currentDevice.device.keyboardUnderglow.ledsRight?.length || 0);
     } else {
       underglowLEDs = currentDevice.device.keyboardUnderglow.rows * currentDevice.device.keyboardUnderglow.columns;
     }
@@ -550,7 +566,15 @@ const LayoutEditor = (props: LayoutEditorProps) => {
     const plette = parsePaletteRaw(paletteData, currentDevice?.device.RGBWMode);
     log.info("PARSED PALETTE: ", paletteData, plette, currentDevice?.device.RGBWMode);
     const colMap = parseColormapRaw(colorMapData, layerSize);
-    log.info("PARSED COLORMAP: ", colorMapData, layerSize, "keyboardLEDs:", keyboardLEDs, "underglowLEDs:", underglowLEDs);
+    log.info(
+      "PARSED COLORMAP: ",
+      colorMapData,
+      layerSize,
+      "keyboardLEDs:",
+      keyboardLEDs,
+      "underglowLEDs:",
+      underglowLEDs,
+    );
 
     return {
       palette: plette,
@@ -573,7 +597,7 @@ const LayoutEditor = (props: LayoutEditorProps) => {
       // log.info(plette, paletteAux, args);
     }
 
-    const result = await device.command("palette", ...args);
+    const result = await device.noCacheCommand("palette", ...args);
     return result;
   };
 
@@ -594,7 +618,7 @@ const LayoutEditor = (props: LayoutEditorProps) => {
         },
       );
     }
-    const result = await device.command("colormap.map", ...args);
+    const result = await device.noCacheCommand("colormap.map", ...args);
     return result;
   };
 
@@ -621,7 +645,8 @@ const LayoutEditor = (props: LayoutEditorProps) => {
       if (!neurons.some(n => n.id === CID) && neurons.length === 0) {
         neuron.id = CID;
         neuron.name = currentDevice?.device.info.product;
-        neuron.layers = store.get("layerNames") !== undefined ? (store.get("layerNames") as Array<LayerType>) : defaultLayerNames;
+        neuron.layers =
+          store.get("layerNames") !== undefined ? (store.get("layerNames") as Array<LayerType>) : defaultLayerNames;
         neuron.macros = store.get("macros") !== undefined ? (store.get("macros") as Array<MacrosType>) : [];
         neuron.superkeys = store.get("superkeys") !== undefined ? (store.get("superkeys") as Array<SuperkeysType>) : [];
         log.info("New neuron", neuron);
@@ -654,7 +679,7 @@ const LayoutEditor = (props: LayoutEditorProps) => {
           // TODO: replacethis with proper popup
           // eslint-disable-next-line no-alert
           result = window.confirm(
-            "A new Neuron was detected and new settings need to be created. The names of the layers, macros and Superkeys are empty. If you want to copy the names of your default Neuron (first in the list) click ‘Ok’. If you prefer to reset all names click ‘Cancel’.",
+            "A new Neuron was detected and new settings need to be created. The names of the layers, macros and Superkeys are empty. If you want to copy the names of your default Neuron (first in the list) click 'Ok'. If you prefer to reset all names click 'Cancel'.",
           );
         }
         // var result = await userAction;
@@ -718,7 +743,8 @@ const LayoutEditor = (props: LayoutEditorProps) => {
         }
 
         const device = currentDevice?.device.info.product;
-        const wirelessChecker = currentDevice?.device.info.keyboardType === "wireless" || currentDevice?.device.wireless;
+        const wirelessChecker =
+          currentDevice?.device.info.keyboardType === "wireless" || currentDevice?.device.wireless;
         if (lang) {
           const deviceLang = { ...currentDevice?.device, language: true };
           currentDevice.commands = {};
@@ -823,32 +849,6 @@ const LayoutEditor = (props: LayoutEditorProps) => {
     [state, setLoading, AnalizeChipID, restoredOk, getColormap, handleSetRestoredOk, keymapDB, onDisconnect],
   );
 
-  const onKeyChange = (keyCode: number) => {
-    // Keys can only change on the custom layers
-    const layer = currentLayer;
-    const keyIndex = currentKeyIndex;
-
-    if (keyIndex === -1) {
-      return;
-    }
-
-    try {
-      const kmap = keymap.custom.slice();
-      const l = keymap.onlyCustom ? layer : layer - keymap.default.length;
-      // log.info(kmap, l, keyIndex, keyCode, keymapDB.parse(keyCode));
-      kmap[l][keyIndex] = keymapDB.parse(keyCode);
-      setModified(true);
-      setKeymap({
-        default: keymap.default,
-        onlyCustom: keymap.onlyCustom,
-        custom: kmap,
-      });
-      startContext();
-    } catch (error) {
-      log.error("Error when assigning key to keymap", error);
-    }
-  };
-
   /**
    * Verify that colors in keyboard button and in color palette is equal
    * @param {number} colorIdx Number of palette index
@@ -928,15 +928,32 @@ const LayoutEditor = (props: LayoutEditorProps) => {
     setCurrentLayer(id);
   };
 
-  const onApply = async () => {
+  const onApply = async (assertUnchanged: () => void = () => {}) => {
     const { currentDevice } = state;
+    if (saveLock.current) return { success: false, error: "Save already in progress" };
+    saveLock.current = true;
     try {
+      if (!currentDevice || currentDevice.isClosed) throw new Error("Device disconnected");
       setLoading(true);
       setIsSaving(true);
-      await currentDevice?.command("keymap.custom", serializeKeymap(keymap.custom));
-      await currentDevice?.command("keymap.onlyCustom", keymap.onlyCustom ? "1" : "0");
-      await updateColormap(currentDevice, colorMap);
-      await updatePalette(currentDevice, palette);
+      await saveWithRecovery(async () => {
+        if (currentDevice.type !== "virtual") {
+          // Read actual hardware for recovery, bypassing potentially stale cached values.
+          const recoveryDevice = Object.create(currentDevice);
+          recoveryDevice.command = currentDevice.noCacheCommand.bind(currentDevice);
+          const commands = await Backup.Commands(recoveryDevice);
+          const recovery = await bkp.DoBackup(commands, neuronID, recoveryDevice);
+          if (!recovery || recovery.backup.some(entry => typeof entry.data !== "string"))
+            throw new Error("Recovery backup failed");
+          if (!Backup.SaveBackup(recovery, currentDevice, true)) throw new Error("Could not store recovery backup");
+        }
+        assertUnchanged();
+      }, [
+        () => currentDevice.noCacheCommand("keymap.custom", serializeKeymap(keymap.custom)),
+        () => currentDevice.noCacheCommand("keymap.onlyCustom", keymap.onlyCustom ? "1" : "0"),
+        () => updateColormap(currentDevice, colorMap),
+        () => updatePalette(currentDevice, palette),
+      ]);
       setCurrentLayer(currentLayer);
       setCurrentKeyIndex(currentKeyIndex);
       setCurrentLedIndex(currentLedIndex);
@@ -963,13 +980,19 @@ const LayoutEditor = (props: LayoutEditorProps) => {
       setLoading(false);
       setIsSaving(false);
       log.info("Changes saved.");
+      return { success: true };
     } catch (error) {
+      currentDevice?.memoryMap.clear();
+      setModified(true);
       toast.error(<ToastMessage title="Error when saving" content={error} icon={<IconArrowDownWithLine />} />, {
         autoClose: 2000,
         icon: "",
       });
       setLoading(false);
       setIsSaving(false);
+      return { success: false, error: String(error) };
+    } finally {
+      saveLock.current = false;
     }
   };
 
@@ -986,11 +1009,14 @@ const LayoutEditor = (props: LayoutEditorProps) => {
 
     if (keymap.onlyCustom) {
       newKeymap = layer < 0 ? keymap.default.slice() : keymap.custom.slice();
-      newKeymap[currentLayer] = layer < 0 ? keymap.default[layer + keymap.default.length].slice() : keymap.custom[layer].slice();
+      newKeymap[currentLayer] =
+        layer < 0 ? keymap.default[layer + keymap.default.length].slice() : keymap.custom[layer].slice();
     } else {
       newKeymap = layer < keymap.default.length ? keymap.default.slice() : keymap.custom.slice();
       newKeymap[currentLayer] =
-        layer < keymap.default.length ? keymap.default[layer].slice() : keymap.custom[layer - keymap.default.length].slice();
+        layer < keymap.default.length
+          ? keymap.default[layer].slice()
+          : keymap.custom[layer - keymap.default.length].slice();
     }
     const newColormap = colorMap.slice();
     if (newColormap.length > 0) newColormap[currentLayer] = colorMap[layer >= 0 ? layer : currentLayer].slice();
@@ -1223,7 +1249,10 @@ const LayoutEditor = (props: LayoutEditorProps) => {
     }
     let cleanKeymap: KeyType[];
     let cleanColormap: number[];
-    if (currentDevice?.device.info.product === "Raise2" && (data.device?.product === "Raise" || data.colormap.length === 132)) {
+    if (
+      currentDevice?.device.info.product === "Raise2" &&
+      (data.device?.product === "Raise" || data.colormap.length === 132)
+    ) {
       cleanKeymap = convertKeymapRtoR2(
         data.keymap.map(k => k.keyCode),
         currentDevice?.device.info.keyboardType,
@@ -1365,10 +1394,14 @@ const LayoutEditor = (props: LayoutEditorProps) => {
     let localIsReadOnly;
     if (keymap.onlyCustom) {
       localIsReadOnly = currentLayer < 0;
-      localLayerData = localIsReadOnly ? keymap.default[currentLayer + keymap.default.length] : keymap.custom[currentLayer];
+      localLayerData = localIsReadOnly
+        ? keymap.default[currentLayer + keymap.default.length]
+        : keymap.custom[currentLayer];
     } else {
       localIsReadOnly = currentLayer < keymap.default.length;
-      localLayerData = localIsReadOnly ? keymap.default[currentLayer] : keymap.custom[currentLayer - keymap.default.length];
+      localLayerData = localIsReadOnly
+        ? keymap.default[currentLayer]
+        : keymap.custom[currentLayer - keymap.default.length];
     }
     const { currentDevice } = state;
     const info = currentDevice?.device.info;
@@ -1458,7 +1491,9 @@ const LayoutEditor = (props: LayoutEditorProps) => {
     for (let index = 0; index < layers.length; index += 1) {
       for (let idx = 0; idx < localKeymap.custom[layers[index]].length; idx += 1) {
         if (oldmacro.includes(localKeymap.custom[layers[index]][idx].keyCode)) {
-          localKeymap.custom[layers[index]][idx] = keymapDB.parse(localKeymap.custom[layers[index]][idx].keyCode + 29276);
+          localKeymap.custom[layers[index]][idx] = keymapDB.parse(
+            localKeymap.custom[layers[index]][idx].keyCode + 29276,
+          );
         }
       }
     }
@@ -1672,6 +1707,45 @@ const LayoutEditor = (props: LayoutEditorProps) => {
   }
 
   // log.info("execution that may not render");
+  const mcp = useLiveEditor({
+    ready: scanned.current && keymap.custom.length > 0,
+    saving: isSaving,
+    draft: {
+      deviceId: neuronID,
+      deviceName,
+      virtual: state.currentDevice?.type === "virtual",
+      connected: !!state.currentDevice && !state.currentDevice.isClosed,
+      selectedLayer: currentLayer,
+      selectedKey: currentKeyIndex,
+      selectedLed: currentLedIndex,
+      dirty: modified,
+      onlyCustom: keymap.onlyCustom,
+      defaultLayerCount: keymap.default.length,
+      keys: keymap.custom.map(row => row.map(key => key.keyCode)),
+      colors: colorMap,
+      palette: palette.map(color => ({ r: color.r, g: color.g, b: color.b })),
+    },
+    apply: draft => {
+      setKeymap({
+        ...keymap,
+        onlyCustom: draft.onlyCustom,
+        custom: draft.keys.map(row => row.map(code => keymapDB.parse(code))),
+      });
+      setPalette(draft.palette.map(color => ({ ...color, rgb: `rgb(${color.r}, ${color.g}, ${color.b})` })));
+      setColorMap(draft.colors.map(row => row.slice()));
+      setModified(draft.dirty);
+      if (draft.dirty) startContext();
+      else cancelContext();
+    },
+    save: onApply,
+  });
+
+  const onKeyChange = (keyCode: number) => {
+    if (currentKeyIndex < 0) return;
+    const layer = keymap.onlyCustom ? currentLayer : currentLayer - keymap.default.length;
+    mcp.editKey(layer, currentKeyIndex, keyCode);
+  };
+
   if (layerData === undefined || layerData.length < 1) return <LoaderLayout steps={scanningStep} />;
   // log.info("GOING TO RENDER!!!");
 
@@ -1699,6 +1773,7 @@ const LayoutEditor = (props: LayoutEditorProps) => {
 
   return (
     <Styles className="layoutEditor h-full">
+      <McpControl />
       <motion.div
         className={`keyboard-editor h-[inherit] px-3 ${modeselect} ${modeselect === "color" ? "[&_.raiseKeyboard]:h-auto" : ""} singleViewMode ${
           typeof selectedPaletteColor === "number" ? "colorSelected" : ""
@@ -1747,7 +1822,9 @@ const LayoutEditor = (props: LayoutEditorProps) => {
             />
           }
           isColorActive={modeselect !== "keyboard"}
-          saveContext={onApply}
+          saveContext={async () => {
+            await onApply();
+          }}
           destroyContext={() => {
             log.info("cancelling context: ", props);
             scanned.current = false;

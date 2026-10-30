@@ -1,116 +1,286 @@
-name: Linux AppImage
+name: Release
 
 on:
   push:
-    branches: ["**"]
-    tags: ["mcp-v*"]
+    branches:
+      - "main"
   pull_request:
-  workflow_dispatch:
+    branches:
+      - "main"
 
 permissions:
   contents: read
 
-concurrency:
-  group: appimage-${{ github.event_name }}-${{ github.ref }}
-  cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/') }}
-
 jobs:
-  build:
-    runs-on: ubuntu-22.04
-    timeout-minutes: 60
+  testing:
+    # Upstream automation needs upstream signing credentials.
+    if: github.repository == \'Dygmalab/Bazecor\'
+    runs-on: ${{ matrix.os }}
+    permissions:
+      contents: write # to be able to publish a GitHub release
+      issues: write # to be able to comment on released issues
+      pull-requests: write # to be able to comment on released pull requests
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-latest
+          - os: windows-2022
+          - os: ubuntu-22.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v4
+        with:
+          python-version: "3.10"
+      - uses: actions/checkout@v3
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.14.0
+      - run: npm install -g yarn
+      - if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y flatpak-builder libudev-dev libusb-1.0-0-dev
+          flatpak remote-add --user --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo
+          bash build/validate-metainfo.sh
+      - name: Cache node_modules
+        id: cache-node-modules
+        uses: actions/cache@v3
+        with:
+          path: node_modules
+          key: ${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('package.json', 'yarn.lock') }}
+      - name: Install node_modules
+        if: steps.cache-node-modules.outputs.cache-hit != 'true'
+        run: yarn install --frozen-lockfile --network-timeout 300000 # sometimes yarn takes time, therefore, we increase the timeout
+      - run: yarn run test
+
+  build:
+    # Upstream automation needs upstream signing credentials.
+    if: github.repository == \'Dygmalab/Bazecor\'
+    runs-on: ${{ matrix.os }}
+    needs: [testing]
+    permissions:
+      contents: write # to be able to publish a GitHub release
+      issues: write # to be able to comment on released issues
+      pull-requests: write # to be able to comment on released pull requests
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-latest
+          - os: windows-2022
+          - os: ubuntu-22.04
+
+    steps:
+      - uses: actions/setup-python@v4
+        with:
+          python-version: "3.10"
+      - uses: actions/checkout@v3
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.14.0
+      - run: npm install -g yarn
+      - if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y flatpak-builder libudev-dev libusb-1.0-0-dev
+          flatpak remote-add --user --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo
+          bash build/validate-metainfo.sh
+      - if: runner.os == 'Windows'
+        name: Set up Java
+        uses: actions/setup-java@v3
+        with:
+          distribution: "temurin"
+          java-version: "17"
+      - if: runner.os == 'Windows'
+        name: Get JSign
+        shell: bash
+        run: |
+          JAR_URL="https://github.com/ebourg/jsign/releases/download/5.0/jsign-5.0.jar"
+          curl -L -o jsign.jar $JAR_URL
+          mkdir windows_signing
+          cp jsign.jar windows_signing/jsign.jar
+      - if: runner.os == 'Windows'
+        name: Setup GCloud Auth
+        uses: "google-github-actions/auth@v1"
+        with:
+          credentials_json: "${{ secrets.GCP_SIGNER_SERVICE_ACCOUNT }}"
+      - if: runner.os == 'Windows'
+        name: "Set up GCloud SDK"
+        uses: "google-github-actions/setup-gcloud@v1"
+        env:
+          CLOUDSDK_PYTHON: ${{ env.pythonLocation }}${{ '\python' }}
+        with:
+          version: ">= 416.0.0"
+      - name: Cache node_modules
+        id: cache-node-modules
+        uses: actions/cache@v3
+        with:
+          path: node_modules
+          key: ${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('package.json', 'yarn.lock') }}
+      - name: Install node_modules
+        if: steps.cache-node-modules.outputs.cache-hit != 'true'
+        run: yarn install --frozen-lockfile --network-timeout 300000 # sometimes yarn takes time, therefore, we increase the timeout
+      - if: runner.os == 'macOS'
+        name: Setup Apple certificates
+        env:
+          APPLE_INSTALLER_CERT_BASE64: ${{ secrets.APPLE_INSTALLER_CERT_BASE64 }}
+          APPLE_APPLICATION_CERT_BASE64: ${{ secrets.APPLE_APPLICATION_CERT_BASE64 }}
+          APPLE_CERT_PASSWORD: ${{ secrets.APPLE_CERT_PASSWORD }}
+          APPLE_KEYCHAIN_PASSWORD: ${{ secrets.APPLE_KEYCHAIN_PASSWORD }}
+        run: |
+          APPLE_INSTALLER_CERT_PATH=$RUNNER_TEMP/apple_installer.p12
+          APPLE_APPLICATION_CERT_PATH=$RUNNER_TEMP/apple_application.p12
+          KEYCHAIN_PATH=$RUNNER_TEMP/apple-signing.keychain-db
+          # create certificates from base64
+          echo -n "$APPLE_INSTALLER_CERT_BASE64" | base64 --decode -o $APPLE_INSTALLER_CERT_PATH
+          echo -n "$APPLE_APPLICATION_CERT_BASE64" | base64 --decode -o $APPLE_APPLICATION_CERT_PATH
+          # create keychain stuff
+          security create-keychain -p "$APPLE_KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
+          security set-keychain-settings -lut 21600 $KEYCHAIN_PATH
+          security unlock-keychain -p "$APPLE_KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
+          #import certificates
+          echo "Importing installer cert"
+          security import $APPLE_INSTALLER_CERT_PATH -P "$APPLE_CERT_PASSWORD" -A -t cert -f pkcs12 -k $KEYCHAIN_PATH
+          echo "Importing application cert"
+          security import $APPLE_APPLICATION_CERT_PATH -P "$APPLE_CERT_PASSWORD" -A -t cert -f pkcs12 -k $KEYCHAIN_PATH
+          security list-keychain -d user -s $KEYCHAIN_PATH
+          # - run: yarn run lint
+      - if: runner.os == 'macOS'
+        name: Build for MacOS Intel
+        env:
+          APPLE_ID: ${{ secrets.APPLEID }}
+          APPLE_ID_PASSWORD: ${{ secrets.APPLEIDPASS }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: yarn run make-mac-intel
+      - if: runner.os == 'macOS'
+        name: Build for MacOS Arm
+        env:
+          APPLE_ID: ${{ secrets.APPLEID }}
+          APPLE_ID_PASSWORD: ${{ secrets.APPLEIDPASS }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: yarn run make-mac-arm
+      - if: runner.os != 'macOS'
+        name: Build for Linux/Windows
+        env:
+          DEBUG: "@malept/flatpak-bundler" # print flatpak-builder output, otherwise failures only show the exit code
+          BAZECOR_FLATPAK: "true" # the flatpak maker is opt-in, see forge.config.ts
+        run: yarn run make
+      - if: runner.os == 'Linux'
+        name: Rename flatpak bundle
+        # match the AppImage naming: Bazecor-<version>-x64.flatpak
+        run: |
+          VERSION=$(node -p "require('./package.json').version")
+          FLATPAK=$(find out/make -type f -name '*.flatpak')
+          if [ "$(echo "$FLATPAK" | grep -c .)" -ne 1 ]; then
+            echo "Expected exactly one .flatpak in out/make, found: '$FLATPAK'"
+            exit 1
+          fi
+          mv -v "$FLATPAK" "$(dirname "$FLATPAK")/Bazecor-${VERSION}-x64.flatpak"
+      - if: runner.os == 'Windows'
+        shell: bash
+        name: Get executable into signing folder
+        # we replace empty spaces in the filename with -
+        run: |
+          find out/make -type f -name '*.exe' -exec bash -c 'mv "$1" "${1// /-}"' _ {} \;
+          find out/make -type f -name '*.exe' -exec cp -v {} windows_signing \;
+      - if: runner.os == 'Windows'
+        name: Sign executable
+        shell: bash
+        run: |
+          cd windows_signing
+          echo "${{ secrets.DIGICERT_CERT_BASE64}}" | base64 --decode > dygma_cert.pem
+          ls -R .
+          EXE_FILE=$(find .  -type f -name '*.exe' -exec basename {} \; 2>/dev/null | head -n 1)
+          echo "Found .exe file:"
+          echo $EXE_FILE
+          java -jar jsign.jar --storetype GOOGLECLOUD --storepass "$(gcloud auth print-access-token)" \
+            --keystore "${{ secrets.GCP_KEYSTORE }}" --alias "${{ secrets.GCP_WINDOWS_SIGNING_KEY }}" \
+            --certfile "dygma_cert.pem" --tsmode RFC3161 --tsaurl http://timestamp.digicert.com $EXE_FILE
+          cd ..
+      - name: Upload build
+        uses: actions/upload-artifact@v3
+        with:
+          name: artifacts
+          path: |
+            out/make/**/*.dmg
+            out/make/**/*.AppImage
+            out/make/**/*.flatpak
+            out/make/**/*.zip
+            out/make/**/*.nupkg
+            windows_signing/**/*.exe
+
+      - name: Show build items
+        if: runner.os != 'Windows'
+        run: |
+          ls -R out/make
+
+      - name: Show build items
+        if: runner.os == 'Windows'
+        run: |
+          ls -R windows_signing
+  release:
+    # Upstream automation needs upstream signing credentials.
+    if: github.repository == \'Dygmalab/Bazecor\'
+    # here we only download the previous artifacts and upload them with release name, just for clarification
+    needs: [build]
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: write # to be able to publish a GitHub release
+      issues: write # to be able to comment on released issues
+      pull-requests: write # to be able to comment on released pull requests
+
+    strategy:
+      fail-fast: false
+
+    steps:
+      - name: Setup Nodejs
+        uses: actions/checkout@v4
         with:
           persist-credentials: false
       - uses: actions/setup-node@v4
         with:
           node-version: 22.14.0
-      - uses: actions/setup-python@v5
+      - name: Cache node_modules
+        id: cache-node-modules
+        uses: actions/cache@v3
         with:
-          python-version: "3.10"
-      - name: Install Linux build dependencies
+          path: node_modules
+          key: release-${{ hashFiles('package.json', 'yarn.lock') }}
+      - name: Install node_modules # we do this so we can use semantic-release
+        if: steps.cache-node-modules.outputs.cache-hit != 'true'
+        run: yarn install --frozen-lockfile --network-timeout 300000 # sometimes yarn takes time, therefore, we increase the timeout
+      - uses: actions/download-artifact@v4.1.7
+        with:
+          name: artifacts
+          path: ${{ github.workspace }}/artifacts
+      - name: Log downloaded artifacts
         run: |
-          sudo apt-get update
-          sudo apt-get install -y build-essential pkg-config libudev-dev libusb-1.0-0-dev libfuse2
-      - name: Install Yarn
-        run: npm install --global yarn@1.22.22
-      - name: Find Yarn cache
-        id: yarn-cache
-        run: echo "dir=$(yarn cache dir)" >> "$GITHUB_OUTPUT"
-      - uses: actions/cache@v4
-        with:
-          path: ${{ steps.yarn-cache.outputs.dir }}
-          key: yarn-linux-x64-${{ hashFiles('yarn.lock') }}
-          restore-keys: yarn-linux-x64-
-      - name: Install dependencies
-        run: yarn install --frozen-lockfile --network-timeout 300000
-      - name: Run unit tests
-        run: yarn test --run
-      - name: Build Linux x64 AppImage
-        env:
-          # appimagetool can run without a mounted FUSE filesystem in CI.
-          APPIMAGE_EXTRACT_AND_RUN: "1"
-        run: yarn make-lin --arch=x64
-      - name: Collect AppImage and checksum
-        env:
-          BUILD_REF: ${{ github.ref_name }}
-          BUILD_SHA: ${{ github.sha }}
-          BUILD_REF_TYPE: ${{ github.ref_type }}
-        shell: bash
+          ls -R ${{ github.workspace }}
+      - name: Extract artifacts into dist folder
         run: |
-          set -euo pipefail
-          mapfile -d '' images < <(find out/make -type f -name '*.AppImage' -print0)
-          if [ "${#images[@]}" -ne 1 ]; then
-            echo "Expected one AppImage, found ${#images[@]}"
-            exit 1
-          fi
-          label="${BUILD_SHA:0:12}"
-          if [ "$BUILD_REF_TYPE" = tag ]; then
-            label="$BUILD_REF"
-          fi
-          # Keep ref names out of file paths unless they are valid release labels.
-          [[ "$label" =~ ^[A-Za-z0-9._-]+$ ]]
-          mkdir -p dist
-          cp "${images[0]}" "dist/Bazecor-MCP-${label}-linux-x64.AppImage"
-          chmod +x dist/*.AppImage
-          cd dist
-          sha256sum ./*.AppImage > SHA256SUMS
-      - uses: actions/upload-artifact@v4
-        with:
-          name: Bazecor-MCP-linux-x64
-          path: dist/
-          if-no-files-found: error
-          retention-days: 30
+          mkdir dist
+          find ${{ github.workspace }}/artifacts -name '*.exe' -exec cp -v {} ${{ github.workspace }}/dist \;
+          find ${{ github.workspace }}/artifacts -name '*.nupkg' -exec cp -v {} ${{ github.workspace }}/dist \;
+          find ${{ github.workspace }}/artifacts -name '*.AppImage' -exec cp -v {} ${{ github.workspace }}/dist \;
+          find ${{ github.workspace }}/artifacts -name '*.flatpak' -exec cp -v {} ${{ github.workspace }}/dist \;
+          find ${{ github.workspace }}/artifacts -name '*.dmg' -exec cp -v {} ${{ github.workspace }}/dist \;
+          find ${{ github.workspace }}/artifacts -name '*.zip' -exec cp -v {} ${{ github.workspace }}/dist \;
 
-  release:
-    if: github.repository == 'chris-pilcher/bazecor-mcp' && github.event_name == 'push' && startsWith(github.ref, 'refs/tags/mcp-v')
-    needs: build
-    runs-on: ubuntu-22.04
-    timeout-minutes: 10
-    permissions:
-      contents: write
-    steps:
-      - uses: actions/download-artifact@v4
-        with:
-          name: Bazecor-MCP-linux-x64
-          path: dist
-      - name: Publish personal release
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GH_REPO: ${{ github.repository }}
-          RELEASE_TAG: ${{ github.ref_name }}
-        shell: bash
+      - name: Log dist folder
         run: |
-          set -euo pipefail
-          cd dist
-          sha256sum --check SHA256SUMS
-          prerelease=()
-          if [[ "${RELEASE_TAG#mcp-v}" == *-* ]]; then
-            prerelease=(--prerelease)
-          fi
-          gh release create "$RELEASE_TAG" ./*.AppImage SHA256SUMS \
-            --verify-tag \
-            --title "Bazecor MCP $RELEASE_TAG" \
-            --generate-notes \
-            "${prerelease[@]}" \
-            --notes 'Personal, unofficial Bazecor fork. Linux x86-64 AppImage. MCP integration is under development; consult the README at this tag for supported functionality. Download the AppImage and SHA256SUMS, verify with sha256sum --check SHA256SUMS, then chmod +x the AppImage and run it.'
+          ls -R ${{ github.workspace}}/dist
+      - name: Upload release
+        uses: actions/upload-artifact@v3
+        with:
+          name: release
+          path: ${{ github.workspace }}/dist
+      - name: Log workspace
+        run: |
+          ls -R ${{ github.workspace}}
+
+      - name: Run semantic-release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GH_ACCESS_TOKEN }}
+        run: npx semantic-release

@@ -1,6 +1,7 @@
 import { app, autoUpdater, Menu, powerMonitor } from "electron";
 import log from "electron-log/main";
 import createWindow from "./createWindow";
+import { configureMcp } from "../mcp/server";
 import { setTheme } from "./setup/theme";
 import setBackup from "./setup/setBackup";
 import GlobalRecording from "./managers/GlobalRecording";
@@ -46,6 +47,7 @@ app.on("ready", async () => {
   setBackup();
   setTheme();
   configureLens();
+  configureMcp();
   configureTray();
   // Logout/restart/shutdown (NSWorkspaceWillPowerOffNotification on macOS) is
   // a real quit, not a Dock "Quit" to redirect into a window close: mark it so
@@ -61,7 +63,7 @@ app.on("ready", async () => {
   // tray-resident with the overlay available but no main window.
   const startHidden = process.argv.includes("--hidden") || app.getLoginItemSettings().wasOpenedAsHidden;
   if (startHidden && getRunInBackground()) {
-    // No window to go with it, so no Dock icon either — the tray icon is the
+    // No window to go with it, so no Dock icon either -- the tray icon is the
     // only entry point until createWindow() brings it back.
     app.dock?.hide();
   } else {
@@ -76,7 +78,7 @@ app.on("ready", async () => {
 // which is terminating the application.
 app.on("before-quit", event => {
   // macOS delivers Cmd+Q (and Dock "Quit") straight to the app as a terminate
-  // request — it never goes through a window's own "close" event, so it skips
+  // request -- it never goes through a window's own "close" event, so it skips
   // right past onClose.ts's "keep running in background" handling and tears
   // down everything, including a live Lens overlay. isAppQuitting() is only
   // true here if something in our own code (tray Quit) already called
@@ -106,7 +108,7 @@ app.on("will-quit", () => {
   overlayController.shutdown();
 });
 
-// NOTE: with the Lens overlay window alive this event never fires — the real
+// NOTE: with the Lens overlay window alive this event never fires -- the real
 // "main window closed" handling lives in setup/onClose.ts. This stays as the
 // quit path for sessions where the overlay was never created.
 app.on("window-all-closed", () => {

@@ -19,7 +19,7 @@ const packagerConfig: ForgePackagerOptions = {
   osxUniversal: {
     x64ArchFiles: "*",
   },
-  extraResource: ["NEWS.md", "src/defaultBackups", "build/logo.png"],
+  extraResource: ["NEWS.md", "src/defaultBackups", "build/logo.png", "mcp"],
   appCopyright: "Copyright © 2018, 2023 DygmaLab SL; distributed under the GPLv3",
 };
 

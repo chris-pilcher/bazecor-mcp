@@ -1,0 +1,119 @@
+name: Linux AppImage
+
+on:
+  push:
+    branches: ["**"]
+    tags: ["mcp-v*"]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: appimage-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/') }}
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.14.0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+      - name: Install Linux build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential pkg-config libudev-dev libusb-1.0-0-dev libfuse2 xvfb xauth
+      - name: Install Yarn
+        run: npm install --global yarn@1.22.22
+      - name: Find Yarn cache
+        id: yarn-cache
+        run: echo "dir=$(yarn cache dir)" >> "$GITHUB_OUTPUT"
+      - uses: actions/cache@v4
+        with:
+          path: ${{ steps.yarn-cache.outputs.dir }}
+          key: yarn-linux-x64-${{ hashFiles('yarn.lock') }}
+          restore-keys: yarn-linux-x64-
+      - name: Install dependencies
+        run: yarn install --frozen-lockfile --network-timeout 300000
+      - name: Run unit tests
+        run: yarn test --run
+      - name: Build Linux x64 AppImage
+        env:
+          # appimagetool can run without a mounted FUSE filesystem in CI.
+          APPIMAGE_EXTRACT_AND_RUN: "1"
+        run: yarn make-lin --arch=x64
+      - name: Verify live MCP against a disposable virtual keyboard
+        run: xvfb-run -a yarn test:mcp-live
+      - name: Collect AppImage and checksum
+        env:
+          BUILD_REF: ${{ github.ref_name }}
+          BUILD_SHA: ${{ github.sha }}
+          BUILD_REF_TYPE: ${{ github.ref_type }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          mapfile -d '' images < <(find out/make -type f -name '*.AppImage' -print0)
+          if [ "${#images[@]}" -ne 1 ]; then
+            echo "Expected one AppImage, found ${#images[@]}"
+            exit 1
+          fi
+          label="${BUILD_SHA:0:12}"
+          if [ "$BUILD_REF_TYPE" = tag ]; then
+            label="$BUILD_REF"
+          fi
+          # Keep ref names out of file paths unless they are valid release labels.
+          [[ "$label" =~ ^[A-Za-z0-9._-]+$ ]]
+          mkdir -p dist
+          cp "${images[0]}" "dist/Bazecor-MCP-${label}-linux-x64.AppImage"
+          chmod +x dist/*.AppImage
+          tar -czf dist/Bazecor-MCP-companion.tar.gz mcp docs/MCP.md
+          cd dist
+          sha256sum ./*.AppImage ./*.tar.gz > SHA256SUMS
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Bazecor-MCP-linux-x64
+          path: dist/
+          if-no-files-found: error
+          retention-days: 30
+
+  release:
+    if: github.repository == 'chris-pilcher/bazecor-mcp' && github.event_name == 'push' && startsWith(github.ref, 'refs/tags/mcp-v')
+    needs: build
+    runs-on: ubuntu-22.04
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: Bazecor-MCP-linux-x64
+          path: dist
+      - name: Publish personal release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd dist
+          sha256sum --check SHA256SUMS
+          prerelease=()
+          if [[ "${RELEASE_TAG#mcp-v}" == *-* ]]; then
+            prerelease=(--prerelease)
+          fi
+          gh release create "$RELEASE_TAG" ./*.AppImage ./*.tar.gz SHA256SUMS \
+            --verify-tag \
+            --title "Bazecor MCP $RELEASE_TAG" \
+            --generate-notes \
+            "${prerelease[@]}" \
+            --notes 'Personal, unofficial Bazecor fork. Linux x86-64 AppImage. Local MCP layout control is available; consult the README at this tag for setup and supported operations. Download the AppImage and SHA256SUMS, verify with sha256sum --check SHA256SUMS, then chmod +x the AppImage and run it.'

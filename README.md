@@ -1,11 +1,13 @@
 # Bazecor MCP
 
 > **Personal, unofficial fork of [Dygma's Bazecor](https://github.com/Dygmalab/Bazecor).**
-> This project aims to make Bazecor's configuration functions available through the
+> This project is making Bazecor's configuration functions available through the
 > Model Context Protocol (MCP), so an agent can connect to the running desktop app
 > and control the same configuration you see and edit in the UI.
-> **MCP control is not implemented yet in this checkout.** The existing keyboard
-> configurator works independently of that planned integration.
+> **Local MCP control is available for a first set of layout operations:** read
+> the live draft, stage standard key and palette-slot assignments, undo, export a
+> layout snapshot, and explicitly save to hardware. Enable MCP in Layout Editor.
+> [Setup, tool contract, coverage and limitations](docs/MCP.md).
 
 Linux x86-64 AppImage is the primary distribution target. This fork is maintained
 for personal use by Chris Pilcher and is not an official Dygma release. Upstream
@@ -52,8 +54,8 @@ git tag mcp-v0.1.0
 git push origin mcp-v0.1.0
 ```
 
-The tag workflow tests and builds the tagged source, then publishes the AppImage
-and SHA-256 checksum in a GitHub Release using the built-in `GITHUB_TOKEN`.
+The standalone `.github/workflows/mcp-appimage.yml` tag workflow tests and builds the tagged source, then publishes the AppImage
+and standalone MCP companion with SHA-256 checksums in a GitHub Release using the built-in `GITHUB_TOKEN`.
 Release assets include the tag in their name; untagged builds include the commit
 SHA. Tags containing a hyphen after the version (for example,
 `mcp-v0.1.0-beta.1`) are published as prereleases. The embedded application version
@@ -74,6 +76,9 @@ The AppImage is written beneath `out/make/`. Flatpak is optional and is not part
 of the personal release workflow.
 
 ---
+
+For keeping the fork current, see [upstream merge guidance](docs/UPSTREAM.md).
+MCP-specific code is kept in separate modules with small app integration points.
 
 The following documentation describes the upstream application.
 
