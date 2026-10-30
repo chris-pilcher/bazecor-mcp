@@ -52,7 +52,13 @@ jobs:
           APPIMAGE_EXTRACT_AND_RUN: "1"
         run: yarn make-lin --arch=x64
       - name: Verify live MCP against a disposable virtual keyboard
-        run: xvfb-run -a yarn test:mcp-live
+        run: |
+          # Avoid the first-launch native permission dialog on a fresh CI runner.
+          # Use the app's own rule text, so this tracks upstream rule changes.
+          sed -n '/^const udevRulesToWrite = /,/^`;/p' src/main/utils/udev.ts | sed '1d;$d' > /tmp/bazecor-test.rules
+          test -s /tmp/bazecor-test.rules
+          sudo install -Dm644 /tmp/bazecor-test.rules /etc/udev/rules.d/60-dygma.rules
+          xvfb-run -a yarn test:mcp-live
       - name: Collect AppImage and checksum
         env:
           BUILD_REF: ${{ github.ref_name }}
