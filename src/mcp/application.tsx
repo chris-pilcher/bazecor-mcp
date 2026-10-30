@@ -80,6 +80,7 @@ export function useMcpApplication(adapter: Adapter) {
           result = {
             deviceId: device.serialNumber,
             values,
+            commandDiscovery: supported.length ? "available" : "unavailable",
             observedAt: new Date().toISOString(),
             note: "Only advertised read-only queries were sent through the existing connection; active layer is unknown unless reported in values.",
           };
@@ -94,6 +95,7 @@ export function useMcpApplication(adapter: Adapter) {
         } else if (command.operation === "devices") {
           result = {
             appVersion: version,
+            mcpVersion: "0.2.1",
             connected: current.state.currentDevice?.serialNumber,
             devices: current.state.deviceList.map(device => ({
               id: device.serialNumber,
@@ -102,6 +104,7 @@ export function useMcpApplication(adapter: Adapter) {
               type: device.type,
               firmware: device.memoryMap.get("version") || null,
               commands: commandsFor(device),
+              commandDiscovery: commandsFor(device).length ? "available" : "unavailable",
               connected: !device.isClosed,
             })),
             note: "Discovery uses the app's existing inventory. Open Device Manager for its normal discovery scan; MCP does not probe an active port independently.",

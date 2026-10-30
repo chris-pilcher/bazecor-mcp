@@ -145,7 +145,7 @@ export default class Backup {
    * @param {*} localBackup The backup data object to be stored locally
    * @returns True when the function has successfully stored the backup locally, and false if something fails, an error log will be also pushed to the console
    */
-  static SaveBackup(backup: BackupType, device: Device, recovery = false) {
+  static SaveBackup(backup: BackupType, device: Device, recovery = false, onStored?: (filePath: string) => void) {
     const localBackup = { ...backup };
     if (device.file !== false) {
       const file = JSON.parse(fs.readFileSync(device.fileData.device.filePath).toString("utf-8"));
@@ -153,6 +153,7 @@ export default class Backup {
       const json = JSON.stringify(file, null, 2);
       try {
         fs.writeFileSync(device.fileData.device.filePath, json);
+        onStored?.(device.fileData.device.filePath);
       } catch (error) {
         log.error(error);
         throw error;
@@ -187,6 +188,7 @@ export default class Backup {
           fs.mkdirSync(path.parse(fullPath).dir, { recursive: true });
         }
         fs.writeFileSync(fullPath, json);
+        onStored?.(fullPath);
         // Notify Layer Lens for every board it can visualize (Sonsei, Defy, ...).
         // Lens stores the ref per product and only displays it when that board is
         // the active (last-connected) device, so an idle Defy backup is harmless.

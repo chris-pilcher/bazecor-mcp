@@ -1,6 +1,6 @@
 import React, { useLayoutEffect, useEffect, useRef, useState } from "react";
 import { ipcRenderer } from "electron";
-import { ActionDescriptor, assertAction } from "./actions";
+import { ActionDescriptor, assertAction, decodeAction } from "./actions";
 import { publicDraft, draftDiff } from "./diff";
 import { validateDefinitions } from "./definitions";
 import { Command, commandSchema, Draft, DraftSession, preflight, validateDraft } from "./domain";
@@ -73,9 +73,7 @@ export function useLiveEditor(adapter: Adapter) {
       }
       if (command.operation === "decode")
         return {
-          actions: command.codes.map(
-            code => (latest.current.catalog || []).find(action => action.code === code) || { code, supported: false },
-          ),
+          actions: command.codes.map(code => decodeAction(code, current, latest.current.catalog || [])),
         };
       if (command.operation === "diff")
         return draftDiff(session.current.baselineDraft() || current, current, command.includePrivate);

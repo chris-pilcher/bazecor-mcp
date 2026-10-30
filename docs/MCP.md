@@ -4,6 +4,45 @@ This personal fork exposes the running application's configuration through MCP.
 The agent and human use the same React drafts and existing device connection.
 Linux x86-64 AppImage is the tested distribution.
 
+## Edit visibly, then save yourself
+
+Ask the agent to use `read_draft`, `list_actions` and `edit_draft`. Draft edits
+update the open Bazecor editor immediately, including keys, layer names, palette
+and LED colors. No JSON export or import is required. Use `selection` edits to
+show the layer being changed. Review the result in the app, then click its Save
+to device button yourself. Tell the agent to leave hardware saves to you.
+
+Layout also accepts `superkey_put`, allowing a new definition and its key
+assignments in the same atomic batch. The Layout Editor previews its name and
+saves changed Superkey definitions before the keymap when you click Save. Macro
+edits and definition deletion use their respective editors. Navigation refuses
+to discard an unsaved draft.
+
+If `edit_draft` is missing from your agent's tools, check its MCP tool filters and
+reconnect the client using the matching release companion. The companion exposes
+this tool in `tools/list`; backup files are not a substitute for live editing.
+
+After updating the companion or generated schemas, restart the client-side MCP
+server so its Node process reloads the contract, then refresh tool discovery.
+Keyboard reconnect and Bazecor restart do not reload a running companion. Codex
+may omit an individual tool when its schema conversion fails; inspect
+`codex_core::mcp_tool_exposure` warnings for `Skipping MCP tool`. Version 0.2.1
+uses homogeneous array schemas for macro interval pairs, with exactly two values,
+to avoid legacy tuple-schema conversion failures. `list_devices.mcpVersion`
+identifies the app's MCP implementation separately from upstream `appVersion`.
+
+An empty `commands` list means advertised capabilities are unavailable, not that
+the keyboard has no configuration. `commandDiscovery` reports this explicitly.
+Version 0.2.1 preserves firmware help when the Layout Editor loads its language
+keymap. It can also reuse cached firmware help from older editor sessions. It
+does not infer writable commands from existing key codes or bypass capability
+checks. Active layer is only known when firmware advertises a layer query.
+
+Recovery responses distinguish the redacted returned backup (`restorable`) from
+the complete local recovery file (`storedPath`, `storedBackupRestorable`, and
+`storedBackupIncludesPrivate`). A redacted response does not mean the stored
+recovery file lost its macros.
+
 ## Hardware-write permission
 
 **Approving the MCP tools `save_to_keyboard` or `restore_backup` permits writes to

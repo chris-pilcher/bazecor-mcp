@@ -23,6 +23,22 @@ vi.mock("../main/managers/Window", () => ({
   default: { getWindow: () => ({ webContents: mocks.web, isDestroyed: () => false }) },
 }));
 describe("authenticated local IPC", () => {
+  it("advertises live draft editing with its validated batch schema", async () => {
+    const reply = await companion.handle({ jsonrpc: "2.0", id: 1, method: "tools/list" });
+    if (!("result" in reply)) throw new Error("Tool discovery failed");
+    const edit = reply.result.tools.find((tool: { name: string }) => tool.name === "edit_draft");
+    expect(edit).toBeDefined();
+    expect(edit.inputSchema.properties).toHaveProperty("edits");
+    expect(edit.inputSchema.properties).toHaveProperty("expectedRevision");
+    expect(edit.annotations.readOnlyHint).toBe(false);
+    expect(edit.description).toContain("Does not write hardware");
+    const checkArraySchemas = (schema: unknown) => {
+      if (!schema || typeof schema !== "object") return;
+      if ("items" in schema) expect(Array.isArray(schema.items)).toBe(false);
+      Object.values(schema).forEach(checkArraySchemas);
+    };
+    checkArraySchemas(edit.inputSchema);
+  });
   it("uses private socket/credentials, forwards only validated commands, and disconnects clients", async () => {
     const temporary = fs.mkdtempSync(path.join(os.tmpdir(), "mcp-ipc-"));
     vi.spyOn(os, "homedir").mockReturnValue(temporary);

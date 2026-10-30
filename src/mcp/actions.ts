@@ -81,3 +81,17 @@ export function assertAction(code: number, draft: Draft, catalog: ActionDescript
   if (layer !== undefined && layer >= draft.keys.length + (draft.onlyCustom ? 0 : draft.defaultLayerCount))
     throw new Error(`Layer route ${layer} does not exist`);
 }
+
+export function decodeAction(code: number, draft: Draft, catalog: ActionDescriptor[]) {
+  const action = catalog.find(entry => entry.code === code);
+  const reference = definitionReference(code);
+  const definition = reference && (reference.kind === "macro" ? draft.macros : draft.superkeys)?.[reference.index];
+  if (action) return { ...action, ...(definition ? { definitionName: definition.name } : {}) };
+  // Existing legacy codes remain inspectable without claiming they can be assigned.
+  return {
+    code,
+    supported: false,
+    ...(reference ? { reference, definitionPresent: !!definition, definitionName: definition?.name } : {}),
+    presentInDraft: draft.keys.some(row => row.includes(code)),
+  };
+}

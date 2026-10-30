@@ -15,7 +15,7 @@ const rgb = z
   })
   .strict();
 export const macroAction = z.union([
-  z.object({ type: z.literal(1), keyCode: z.tuple([code, code]) }).strict(),
+  z.object({ type: z.literal(1), keyCode: z.array(code).length(2) }).strict(),
   z.object({ type: z.union([z.literal(2), z.literal(3), z.literal(4), z.literal(5)]), keyCode: code }).strict(),
   z
     .object({ type: z.union([z.literal(6), z.literal(7), z.literal(8)]), keyCode: z.number().int().min(0).max(255) })
@@ -171,14 +171,19 @@ export function applyExtended(input: Draft, edit: ExtendedEdit, validateCode: (c
       break;
     case "superkey_put":
       if (
-        draft.editor !== "superkeys" ||
+        !["superkeys", "layout"].includes(draft.editor) ||
         !draft.superkeys ||
         edit.index > draft.superkeys.length ||
         edit.index >= (draft.limits?.superkeys || 70)
       )
-        throw new Error("Open Superkeys Editor; use an existing index or append at the next index");
+        throw new Error("Open Layout or Superkeys Editor; use an existing index or append at the next index");
       if (edit.actions.some(value => value === 0))
         throw new Error("Use 1 for an empty Superkey gesture; 0 is the wire terminator");
+      if (draft.editor === "layout" && !draft.commands?.includes("superkeys.map"))
+        throw new Error("Firmware does not advertise superkeys.map");
+      edit.actions.forEach(value => {
+        if (value !== 1) validateCode(value, draft);
+      });
       draft.superkeys[edit.index] = {
         id: edit.index,
         name: edit.name,

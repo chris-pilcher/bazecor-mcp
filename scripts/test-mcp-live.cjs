@@ -104,8 +104,28 @@ async function main() {
     const blocked = await client.callTool({ name: "open_editor", arguments: { editor: "macros" } });
     assert.equal(blocked.isError, true);
     await call("discard_draft", { expectedRevision: current.revision });
+    current = await waitDraft("layout");
+    const layoutSuperIndex = current.superkeys.length;
+    current = await call("edit_draft", {
+      expectedRevision: current.revision,
+      edits: [
+        { kind: "superkey_put", index: layoutSuperIndex, name: "Live preview", actions: [4, 1, 1, 1, 1] },
+        { kind: "key", layer: 0, key: 0, keyCode: 53980 + layoutSuperIndex },
+      ],
+    });
+    assert.equal(current.superkeys[layoutSuperIndex].name, "Live preview");
+    await page.getByRole("button", { name: /Save\s+changes/ }).click();
+    for (let attempt = 0; attempt < 100; attempt++) {
+      current = await call("read_draft");
+      if (!current.dirty) break;
+      await new Promise(resolve => setTimeout(resolve, 100));
+    }
+    assert.equal(current.dirty, false, "Human Save button must save the shared layout draft");
     await call("open_editor", { editor: "macros" });
     current = await waitDraft("macros");
+    assert.equal(current.superkeys[layoutSuperIndex].name, "Live preview");
+    assert.equal(current.keys[0][0], 53980 + layoutSuperIndex);
+    assert.equal(current.superkeys[layoutSuperIndex].actions[0], 4);
     const macroIndex = current.macros.length;
     const actions = [
       { type: 1, keyCode: [10, 20] },

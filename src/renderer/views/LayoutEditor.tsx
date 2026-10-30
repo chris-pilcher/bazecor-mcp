@@ -75,6 +75,7 @@ import {
   serializeKeymap,
   serializePalette,
   serializeColormap,
+  serializeSuperkeys,
 } from "../../api/parsers";
 
 import { importBackup } from "../../mcp/backups";
@@ -489,6 +490,7 @@ const LayoutEditor = (props: LayoutEditorProps) => {
   const [colorMap, setColorMap] = useState([]);
   const [macros, setMacros] = useState<MacrosType[]>();
   const [superkeys, setSuperkeys] = useState<SuperkeysType[]>();
+  const savedSuperkeys = useRef<string>();
 
   const [modified, setModified] = useState(false);
   const [modeselect, setModeselect] = useState<ModeType>("keyboard");
@@ -733,7 +735,7 @@ const LayoutEditor = (props: LayoutEditorProps) => {
           currentDevice?.device.info.keyboardType === "wireless" || currentDevice?.device.wireless;
         if (lang) {
           const deviceLang = { ...currentDevice?.device, language: true };
-          currentDevice.commands = {};
+          currentDevice.commands = { ...currentDevice.commands };
           currentDevice.commands.keymap = new Keymap(deviceLang);
           setkeymapDB((currentDevice?.commands.keymap as Keymap).db);
         }
@@ -817,6 +819,7 @@ const LayoutEditor = (props: LayoutEditorProps) => {
         setColorMap(colormap.colorMap);
         setMacros(parsedMacros);
         setSuperkeys(parsedSuper);
+        savedSuperkeys.current = serializeSuperkeys(parsedSuper);
         setNeuronID(chipID);
         setDeviceName(device);
         setIsWireless(wirelessChecker);
@@ -926,6 +929,9 @@ const LayoutEditor = (props: LayoutEditorProps) => {
         currentDevice,
         neuronID,
         [
+          ...(serializeSuperkeys(superkeys) !== savedSuperkeys.current
+            ? [() => currentDevice.noCacheCommand("superkeys.map", serializeSuperkeys(superkeys))]
+            : []),
           () => currentDevice.noCacheCommand("keymap.custom", serializeKeymap(keymap.custom)),
           () => currentDevice.noCacheCommand("keymap.onlyCustom", keymap.onlyCustom ? "1" : "0"),
           () => updateColormap(currentDevice, colorMap),
@@ -934,6 +940,7 @@ const LayoutEditor = (props: LayoutEditorProps) => {
         assertUnchanged,
       );
       setCurrentLayer(currentLayer);
+      savedSuperkeys.current = serializeSuperkeys(superkeys);
       setCurrentKeyIndex(currentKeyIndex);
       setCurrentLedIndex(currentLedIndex);
       setModified(false);
@@ -945,6 +952,7 @@ const LayoutEditor = (props: LayoutEditorProps) => {
       const neuronIndex = neurons.findIndex(neuron => neuron.id === neuronID);
       if (neuronIndex >= 0) {
         neurons[neuronIndex].layers = layerNames;
+        neurons[neuronIndex].superkeys = superkeys;
         store.set("neurons", neurons);
       }
       const commands = await Backup.Commands(currentDevice);
@@ -1746,6 +1754,7 @@ const LayoutEditor = (props: LayoutEditorProps) => {
       setCurrentLedIndex(draft.selectedLed);
       setPalette(draft.palette.map(color => ({ ...color, rgb: `rgb(${color.r}, ${color.g}, ${color.b})` })));
       setColorMap(draft.colors.map(row => row.slice()));
+      setSuperkeys(draft.superkeys);
       setModified(draft.dirty);
       if (draft.dirty) startContext();
       else cancelContext();

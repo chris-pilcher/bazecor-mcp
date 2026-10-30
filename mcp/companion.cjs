@@ -104,7 +104,7 @@ async function handle(message) {
         ? params.protocolVersion
         : "2025-03-26",
       capabilities: { tools: {}, resources: {} },
-      serverInfo: { name: "bazecor-live-editor", version: "0.2.0" },
+      serverInfo: { name: "bazecor-live-editor", version: "0.2.1" },
       instructions: guide,
     });
   if (method === "ping") return reply({});

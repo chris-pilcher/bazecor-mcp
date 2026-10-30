@@ -10,7 +10,9 @@ const store = Store.getStore();
 export function commandsFor(device: Device): string[] {
   if (!device) return [];
   if (device.type === "virtual") return Object.keys(device.fileData?.virtual || {});
-  const raw = device.commands?.help;
+  // Older editor sessions discarded commands.help while replacing the language
+  // keymap. A cached help response is still firmware-advertised capability data.
+  const raw = device.commands?.help ?? device.memoryMap?.get("help");
   return (Array.isArray(raw) ? raw : String(raw || "").split(/\r?\n/))
     .map(command => String(command).trim().split(/\s+/)[0])
     .filter(Boolean);

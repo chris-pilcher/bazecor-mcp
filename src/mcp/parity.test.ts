@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { Draft, preflight, DraftSession, commandSchema } from "./domain";
-import { actionCatalog, assertAction, layerTarget } from "./actions";
+import { actionCatalog, assertAction, decodeAction, layerTarget } from "./actions";
 import { draftDiff, publicDraft } from "./diff";
 import type { KeymapDB } from "../api/keymap";
 
@@ -36,6 +36,33 @@ const initial = (): Draft => ({
 const accepted = (code: number, draft: Draft) =>
   assertAction(code, draft, [{ id: `keycode:${code}`, code, category: "test", label: "test" }]);
 describe("practical MCP parity", () => {
+  it("stages Superkey definitions and references together in the visible layout draft", () => {
+    const draft: Draft = { ...initial(), commands: ["superkeys.map"], superkeys: [] };
+    const next = preflight(
+      draft,
+      [
+        { kind: "superkey_put", index: 0, name: "Mac Space", actions: [44, 227, 1, 1, 1] },
+        { kind: "key", layer: 0, key: 0, keyCode: 53980 },
+      ],
+      accepted,
+    );
+    expect(next.superkeys[0].name).toBe("Mac Space");
+    expect(next.keys[0][0]).toBe(53980);
+    expect(draft.superkeys).toEqual([]);
+    expect(() =>
+      preflight(
+        { ...draft, commands: [] },
+        [{ kind: "superkey_put", index: 0, name: "Mac Space", actions: [44, 227, 1, 1, 1] }],
+        accepted,
+      ),
+    ).toThrow(/advertise/);
+    expect(decodeAction(53980, next, [])).toMatchObject({
+      supported: false,
+      definitionName: "Mac Space",
+      definitionPresent: true,
+      presentInDraft: true,
+    });
+  });
   it("keeps layer copy/reset/name and RGB palette/side edits atomic", () => {
     const original = initial();
     const edits = commandSchema.parse({

@@ -10,6 +10,7 @@ import { commandsFor } from "./deviceDraft";
 export async function readBackup(device: Device, includePrivate: boolean, store = false) {
   if (!device || device.isClosed) throw new Error("Connect a device first");
   let result: unknown;
+  let storedPath: string | undefined;
   if (device.type === "virtual") {
     const id = String(device.device.chipId || device.serialNumber).replace(/\s/g, "");
     const neurons = Store.getStore().get("neurons") as Array<{ id: string }>;
@@ -31,7 +32,12 @@ export async function readBackup(device: Device, includePrivate: boolean, store 
     result = await new Backup().DoBackup(await Backup.Commands(uncached), id, uncached);
     const validated = backupSchema.parse(result);
     if (validated.backup.some(entry => typeof entry.data !== "string")) throw new Error("Backup read failed");
-    if (store && !Backup.SaveBackup(result as Parameters<typeof Backup.SaveBackup>[0], device, true))
+    if (
+      store &&
+      !Backup.SaveBackup(result as Parameters<typeof Backup.SaveBackup>[0], device, true, filePath => {
+        storedPath = filePath;
+      })
+    )
       throw new Error("Backup storage failed");
   }
   const backup = JSON.parse(JSON.stringify(result));
@@ -51,6 +57,7 @@ export async function readBackup(device: Device, includePrivate: boolean, store 
     privateContentIncluded: includePrivate,
     restorable: includePrivate,
     stored: store,
+    ...(store ? { storedPath, storedBackupIncludesPrivate: true, storedBackupRestorable: true } : {}),
     note: store
       ? "Stored in Bazecor's configured backup folder"
       : "Hardware/virtual saved state, not the unsaved UI draft",
