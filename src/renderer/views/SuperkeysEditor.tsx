@@ -31,8 +31,6 @@ import Callout from "@Renderer/components/molecules/Callout/Callout";
 import SuperkeysSelector from "@Renderer/components/organisms/Select/SuperkeysSelector";
 import { Button } from "@Renderer/components/atoms/Button";
 import LogoLoader from "@Renderer/components/atoms/loader/LogoLoader";
-import ToastMessage from "@Renderer/components/atoms/ToastMessage";
-import { IconFloppyDisk } from "@Renderer/components/atoms/icons";
 
 // Modules
 import { PageHeader } from "@Renderer/modules/PageHeader";
@@ -101,6 +99,7 @@ const Styles = Styled.div`
 const MAX_SUPERKEYS = 70;
 
 function SuperkeysEditor(props: SuperkeysEditorProps) {
+  const { setLoading: setAppLoading, cancelContext: cancelAppContext, startContext: startAppContext } = props;
   let keymapDB = new KeymapDB();
   const bkp = new Backup();
   const [isSaving, setIsSaving] = useState(false);
@@ -143,6 +142,20 @@ function SuperkeysEditor(props: SuperkeysEditorProps) {
     state.modified = true;
     setState({ ...state });
     startContext();
+  };
+
+  const changeAction = (id: number) => {
+    const { selectedAction } = state;
+
+    if (id === selectedAction) {
+      // Some action is already selected
+      state.selectedAction = -1;
+      setState({ ...state });
+      return;
+    }
+    state.selectedAction = id < 0 ? 0 : id;
+    state.showStandardView = false;
+    setState({ ...state });
   };
 
   const loadSuperkeys = async () => {
@@ -242,20 +255,6 @@ function SuperkeysEditor(props: SuperkeysEditorProps) {
     setState({ ...state });
   };
 
-  const changeAction = (id: number) => {
-    const { selectedAction } = state;
-
-    if (id === selectedAction) {
-      // Some action is already selected
-      state.selectedAction = -1;
-      setState({ ...state });
-      return;
-    }
-    state.selectedAction = id < 0 ? 0 : id;
-    state.showStandardView = false;
-    setState({ ...state });
-  };
-
   const updateSuper = (newSuper: SuperkeysType[], newID: number) => {
     const { startContext } = props;
     // log.info("launched update super using data:", newSuper, newID);
@@ -294,7 +293,7 @@ function SuperkeysEditor(props: SuperkeysEditorProps) {
     saveLock.current = true;
     const { currentDevice } = deviceState;
     setIsSaving(true);
-    props.setLoading(true);
+    setAppLoading(true);
     try {
       await recoverySave(
         currentDevice,
@@ -330,7 +329,7 @@ function SuperkeysEditor(props: SuperkeysEditorProps) {
       const backup = await bkp.DoBackup(await Backup.Commands(currentDevice), state.neuronID, currentDevice);
       Backup.SaveBackup(backup, currentDevice);
       setState({ ...state, modified: false, storedMacros: state.macros, storedSuper: state.superkeys });
-      props.cancelContext();
+      cancelAppContext();
       return { success: true };
     } catch (error) {
       setState({ ...state, modified: true });
@@ -339,7 +338,7 @@ function SuperkeysEditor(props: SuperkeysEditorProps) {
     } finally {
       saveLock.current = false;
       setIsSaving(false);
-      props.setLoading(false);
+      setAppLoading(false);
     }
   };
 
@@ -592,15 +591,15 @@ function SuperkeysEditor(props: SuperkeysEditorProps) {
     apply: draft => {
       setState({
         ...state,
-        keymap: { ...state.keymap, custom: draft.keys.map(row => row.map(code => keymapDB.parse(code))) },
+        keymap: { ...state.keymap, custom: draft.keys.map(row => row.map(keyCode => keymapDB.parse(keyCode))) },
         macros: draft.macros,
         superkeys: draft.superkeys,
         selectedSuper: Math.max(0, Math.min(state.selectedSuper, (draft.superkeys?.length || 1) - 1)),
         modified: draft.dirty,
         modifiedKeymap: true,
       });
-      if (draft.dirty) props.startContext();
-      else props.cancelContext();
+      if (draft.dirty) startAppContext();
+      else cancelAppContext();
     },
     save: writeSuper,
   });

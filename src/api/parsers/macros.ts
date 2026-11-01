@@ -14,8 +14,12 @@ export const parseMacrosRaw = (raw: string, storedMacros?: MacrosType[]) => {
   while (iter < macrosArray.length && macrosArray[iter] !== 255) {
     const actions: MacroActionsType[] = [];
     while (iter < macrosArray.length && macrosArray[iter] !== 0) {
-      const type = macrosArray[iter++];
-      const width = type === 1 ? 4 : type >= 2 && type <= 5 ? 2 : type >= 6 && type <= 8 ? 1 : -1;
+      const type = macrosArray[iter];
+      iter += 1;
+      let width = -1;
+      if (type === 1) width = 4;
+      else if (type >= 2 && type <= 5) width = 2;
+      else if (type >= 6 && type <= 8) width = 1;
       if (width < 0) throw new Error(`Unsupported macro opcode ${type}`);
       if (iter + width > macrosArray.length) throw new Error("Truncated macro action");
       let keyCode: number | number[];

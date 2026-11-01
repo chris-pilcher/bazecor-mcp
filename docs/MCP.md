@@ -157,6 +157,15 @@ firmware inheritance. Supported layer edits are `layer_name`, `layer_copy`,
 explicit `firmware_default` with `defaultLayer`. No default source is guessed.
 Layer names now share draft/save/undo semantics instead of persisting immediately.
 
+For persistent OS or base-mode switching, distinguish a layer lock (toggle one
+layer on/off) from Move to layer (replace the active layer stack). A transparent
+base overlay needs its underlying base to remain active; do not combine it with
+a Move action that removes that base. For explicit switches in each direction,
+make both bases complete first, then use the appropriate Move action in each
+mode's function layer. Read back the staged routes and test the physical keys
+after the human saves. Draft validation checks references and supported actions;
+it does not prove firmware key-press behavior or layer priority.
+
 Colors support `palette`, `color`, `color_bulk`, and `color_side`. Palette edits
 specify integer RGB channels 0 to 255. Slot counts come from the live palette.
 `color_side` accepts `left`, `right` or `both` and `keys`, `underglow` or `all`.

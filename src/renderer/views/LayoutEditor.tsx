@@ -1650,9 +1650,6 @@ const LayoutEditor = (props: LayoutEditorProps) => {
   }, [keymap, currentLayer, macros, superkeys]);
 
   const { Layer } = getLayout();
-  if (!Layer) {
-    return <div />;
-  }
 
   const copyCustomItems = keymap
     ? keymap.custom.map((_: unknown, id: number) => {
@@ -1740,7 +1737,7 @@ const LayoutEditor = (props: LayoutEditorProps) => {
       setKeymap({
         ...keymap,
         onlyCustom: draft.onlyCustom,
-        custom: draft.keys.map(row => row.map(code => keymapDB.parse(code))),
+        custom: draft.keys.map(row => row.map(keyCode => keymapDB.parse(keyCode))),
       });
       if (draft.layerNames)
         setLayerNames(
@@ -1768,6 +1765,7 @@ const LayoutEditor = (props: LayoutEditorProps) => {
     mcp.editKey(layer, currentKeyIndex, keyCode);
   };
 
+  if (!Layer) return <div />;
   if (layerData === undefined || layerData.length < 1) return <LoaderLayout steps={scanningStep} />;
   // log.info("GOING TO RENDER!!!");
 

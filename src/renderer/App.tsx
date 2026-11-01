@@ -17,8 +17,6 @@
 
 import React, { useState, useEffect, useCallback, useRef } from "react";
 import { flushSync } from "react-dom";
-import { useMcpApplication } from "../mcp/application";
-import { McpControl } from "../mcp/useLiveEditor";
 import { Routes, Navigate, Route, useNavigate } from "react-router-dom";
 import { toast } from "react-toastify";
 import { ThemeProvider } from "styled-components";
@@ -50,6 +48,8 @@ import { VersionUpdateDialog } from "@Renderer/components/molecules/CustomModal/
 import UdevPolkitErrorDialog from "@Renderer/components/molecules/CustomModal/UdevPolkitErrorDialog";
 import getTranslator from "@Renderer/utils/translator";
 import { Neuron } from "@Types/neurons";
+import { McpControl } from "../mcp/useLiveEditor";
+import { useMcpApplication } from "../mcp/application";
 import { version } from "../../package.json";
 import "../api/keymap";
 import "../api/colormap";

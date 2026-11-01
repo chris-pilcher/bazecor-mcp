@@ -50,9 +50,7 @@ import {
   IconKeyboard,
   IconLogoDygma,
   IconSignal,
-  IconNeuronManager,
   IconChip,
-  IconWrench,
   IconLens,
 } from "@Renderer/components/atoms/icons";
 
@@ -66,7 +64,6 @@ import { WirelessInterface } from "@Renderer/types/wireless";
 import LogoLoader from "@Renderer/components/atoms/loader/LogoLoader";
 import { Neuron } from "@Renderer/types/neurons";
 import Backup from "../../api/backup";
-import { delay } from "../../api/flash/delay";
 
 import { importBackup } from "../../mcp/backups";
 import { useLiveEditor } from "../../mcp/useLiveEditor";

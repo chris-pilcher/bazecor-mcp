@@ -41,12 +41,7 @@ import { MacroActionsType, MacrosType } from "@Renderer/types/macros";
 // Components
 import LogoLoader from "@Renderer/components/atoms/loader/LogoLoader";
 import { Button } from "@Renderer/components/atoms/Button";
-import {
-  IconArrowDownWithLine,
-  IconArrowUpWithLine,
-  IconFloppyDisk,
-  IconLoader,
-} from "@Renderer/components/atoms/icons";
+import { IconArrowDownWithLine, IconArrowUpWithLine, IconLoader } from "@Renderer/components/atoms/icons";
 import MacroSelector from "@Renderer/components/organisms/Select/MacroSelector";
 import ToastMessage from "@Renderer/components/atoms/ToastMessage";
 import Callout from "@Renderer/components/molecules/Callout/Callout";
@@ -122,6 +117,7 @@ const Styles = Styled.div`
 `;
 
 function MacroEditor(props: MacroEditorProps) {
+  const { setLoading: setAppLoading, cancelContext: cancelAppContext, startContext: startAppContext } = props;
   let keymapDB = new KeymapDB();
   const bkp = new Backup();
   const [isSaving, setIsSaving] = useState(false);
@@ -242,7 +238,7 @@ function MacroEditor(props: MacroEditorProps) {
     saveLock.current = true;
     const { currentDevice } = deviceState;
     setIsSaving(true);
-    props.setLoading(true);
+    setAppLoading(true);
     try {
       await recoverySave(
         currentDevice,
@@ -264,7 +260,7 @@ function MacroEditor(props: MacroEditorProps) {
       const backup = await bkp.DoBackup(await Backup.Commands(currentDevice), state.neuronID, currentDevice);
       Backup.SaveBackup(backup, currentDevice);
       setState({ ...state, modified: false, storedMacros: state.macros, storedSuper: state.superkeys });
-      props.cancelContext();
+      cancelAppContext();
       return { success: true };
     } catch (error) {
       setState({ ...state, modified: true });
@@ -273,7 +269,7 @@ function MacroEditor(props: MacroEditorProps) {
     } finally {
       saveLock.current = false;
       setIsSaving(false);
-      props.setLoading(false);
+      setAppLoading(false);
     }
   };
 
@@ -765,8 +761,8 @@ function MacroEditor(props: MacroEditorProps) {
         modified: draft.dirty,
         usedMemory: draft.macros.map(macro => macro.actions).flat().length,
       });
-      if (draft.dirty) props.startContext();
-      else props.cancelContext();
+      if (draft.dirty) startAppContext();
+      else cancelAppContext();
     },
     save: writeMacros,
   });
